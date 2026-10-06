@@ -14,7 +14,8 @@ def list_incidents():
 
 @router.post("/upload", response_model=IncidentRef)
 async def upload_incident(file: UploadFile = File(...)):
-    return data_loader.save_upload(await file.read())
+    from backend.core.config import UPLOAD_MAX_MB
+    return data_loader.save_upload(await file.read(int(UPLOAD_MAX_MB * 1024 * 1024) + 1), file.filename or "")
 
 
 @router.get("/{incident_id}", response_model=IncidentSummary)

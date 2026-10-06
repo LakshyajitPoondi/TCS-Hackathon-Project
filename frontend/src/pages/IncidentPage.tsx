@@ -57,10 +57,13 @@ export function IncidentPage() {
   const [sopId, setSopId] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const resultsRef = useRef<HTMLDivElement>(null);
+  const activeRun = useRef(0);
   const loadingLabel = useCyclingLabel(analyzing);
 
   useEffect(() => {
     let alive = true;
+    activeRun.current++;
+    setAnalyzing(false);
     setSummary(null);
     setSummaryError(null);
     setSignals(null);
@@ -80,18 +83,20 @@ export function IncidentPage() {
   }, [id]);
 
   const run = async () => {
+    const runToken = ++activeRun.current;
     setAnalyzing(true);
     setAnalyzeError(null);
     try {
       const res = await analyzeIncident(id);
+      if (runToken !== activeRun.current) return;
       setAnalysis(res);
       setDraft(res.rca_draft); // engineer edits reset only on a new analysis
       setWarning(res.warning);
       window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
     } catch (e) {
-      setAnalyzeError(errorMessage(e));
+      if (runToken === activeRun.current) setAnalyzeError(errorMessage(e));
     } finally {
-      setAnalyzing(false);
+      if (runToken === activeRun.current) setAnalyzing(false);
     }
   };
 

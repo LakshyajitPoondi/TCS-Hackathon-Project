@@ -82,7 +82,7 @@ TRIAGE_STEPS = ("SOP-002", ["Review the alarm and downtime log for the incident 
 
 
 def _num(x) -> str:
-    return f"{x:.1f}" if abs(x) >= 10 else f"{x:.2f}"
+    return "unavailable" if x is None else (f"{x:.1f}" if abs(x) >= 10 else f"{x:.2f}")
 
 
 def _ev(signal, description, value=None, machine=None) -> dict:
@@ -100,6 +100,8 @@ def _join(items: list[str]) -> str:
 def _shift_ev(E, m, s):
     e = E["machine_stats"][m][s]
     b, w = e["baseline"]["mean"], e["window"]["mean"]
+    if not (e.get("rose") or e.get("fell")) or any(v is None for v in (b, w, e.get("delta_abs"))):
+        return None
     word = "rose" if e["delta_abs"] > 0 else "fell"
     pct = f" {abs(e['delta_pct']):.0f}%" if e["delta_pct"] is not None else ""
     return _ev(f"{s}_delta", f"{LABEL[s]} on {m} {word}{pct} vs baseline ({_num(b)} → {_num(w)}).", e["delta_abs"], m)
@@ -157,7 +159,7 @@ def _rules(key, E):
         tm = ms[t]["temperature"]
         n_alarm = _alarm_count(E, t, "TEMP")
         return t, [
-            (W_STRONG, tm["rose"], _shift_ev(E, t, "temperature"), f"elevated temperature on {t} ({tm['delta_abs']:+.1f})"),
+            (W_STRONG, tm["rose"], tm["rose"] and _shift_ev(E, t, "temperature"), f"elevated temperature on {t} ({(tm['delta_abs'] or 0):+.1f})"),
             (W_MODERATE, ms[t]["speed"]["fell"], ms[t]["speed"]["fell"] and _shift_ev(E, t, "speed"), f"reduced speed on {t}"),
             (W_MODERATE, n_alarm > 0, _ev("alarm_temp_hi", f"{n_alarm} high-temperature alarm(s) on {t} during the window.", n_alarm, t),
              "high-temperature alarms"),
@@ -181,7 +183,7 @@ def _rules(key, E):
         any_vib = any(ms[m]["vibration"]["rose"] for m in E["machines"])
         shared = [s for s, v in co["per_signal"].items() if v["same_direction"]]
         return t, [
-            (W_STRONG, vm["rose"], _shift_ev(E, t, "vibration"), f"higher vibration on {t} ({vm['delta_abs']:+.2f})"),
+            (W_STRONG, vm["rose"], vm["rose"] and _shift_ev(E, t, "vibration"), f"higher vibration on {t} ({(vm['delta_abs'] or 0):+.2f})"),
             (W_MODERATE, ms[t]["motor_current"]["rose"], ms[t]["motor_current"]["rose"] and _shift_ev(E, t, "motor_current"),
              f"higher motor current on {t}"),
             (W_MODERATE, ms[t]["speed"]["jittery"],

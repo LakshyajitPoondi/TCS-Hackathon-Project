@@ -1,12 +1,30 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+import logging
+import uuid
+import time
 
 from backend.api.routes import analysis, cases, evals, incidents, sops
 from backend.core.config import API_NAME, API_VERSION, CORS_ORIGINS
 from backend.services.data_loader import IncidentNotFoundError, IncidentValidationError
 
 app = FastAPI(title=API_NAME, version=API_VERSION)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+log = logging.getLogger("rca.requests")
+
+@app.middleware("http")
+async def request_context(request: Request, call_next):
+    request.state.request_id = uuid.uuid4().hex
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        log.exception("request_id=%s unexpected request failure", request.state.request_id)
+        response = JSONResponse(status_code=500, content={"detail": "Internal server error", "request_id": request.state.request_id})
+    response.headers["X-Request-ID"] = request.state.request_id
+    log.info("request_id=%s method=%s path=%s status=%s latency_ms=%.1f", request.state.request_id, request.method, request.url.path, response.status_code, (time.perf_counter()-started)*1000)
+    return response
 
 app.add_middleware(
     CORSMiddleware,

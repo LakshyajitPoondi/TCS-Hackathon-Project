@@ -57,11 +57,13 @@ export function SopModal({ sopId, onClose }: { sopId: string | null; onClose: ()
 
   useEffect(() => {
     if (!sopId) return;
+    let alive = true;
     setSop(null);
     setError(null);
     getSop(sopId)
-      .then(setSop)
-      .catch((e) => setError(errorMessage(e)));
+      .then((value) => alive && setSop(value))
+      .catch((e) => alive && setError(errorMessage(e)));
+    return () => { alive = false; };
   }, [sopId]);
 
   return (

@@ -46,3 +46,10 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 LLM_ENABLED = os.getenv("LLM_ENABLED", "true").strip().lower() in ("1", "true", "yes")
 LLM_TIMEOUT_S = 15
 LLM_TEMPERATURE = 0.2
+
+# Broad safety bounds, not anomaly thresholds. Seeded machine normal ranges are narrower.
+PHYSICAL_RANGES = {"temperature": (-50, 500), "speed": (0, 10000), "vibration": (0, 100),
+                   "motor_current": (0, 1000), "defect_count": (0, 1000000), "downtime_min": (0, 1440)}
+UPLOAD_MAX_MB = float(os.getenv("UPLOAD_MAX_MB", "10"))
+DOC_UPLOAD_MAX_MB = float(os.getenv("DOC_UPLOAD_MAX_MB", "20"))
+CORS_ORIGINS = [x.strip() for x in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")]
