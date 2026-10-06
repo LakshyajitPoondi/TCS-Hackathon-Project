@@ -23,6 +23,7 @@ from backend.models.schemas import (
 )
 from engine import llm
 from engine import retrieval
+from engine.agent import investigate
 from engine.grounding import check_detailed
 from engine.memory import build_signature, recall
 from engine.rag import SOP_INDEX, TRIAGE_SOP, get_sop, retrieve_for_hypothesis
@@ -128,12 +129,17 @@ def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, 
     scored = score_hypotheses(evidence)
     hyps = scored["hypotheses"]
     signature = build_signature(evidence)
-    similar = recall(signature, exclude_incident_id=incident_id)
     line=str(df['line'].iloc[0]);machines=sorted(df['machine'].unique())
+    target=hyps[0].get('target') if hyps else None
+    context={'machine_uid':line+'/'+target if target in machines else None,'line':line,'model':'IMM',
+             'confirmed_category':hyps[0]['category'] if hyps else None,'confirmed_subcause':hyps[0]['subcause'] if hyps else None,
+             'events':sorted(df['event_code'].dropna().unique())}
+    similar = recall(signature, exclude_incident_id=incident_id,context=context)
     rag_results={h['rank']:retrieval.for_hypothesis(h,line,machines) for h in hyps}
     if not hyps:
         rag_results={0:retrieval.search([line+'/'+m for m in machines],'incident triage measurement verification')}
     accessed,filtered=retrieval.provenance(rag_results)
+    investigation,trace=investigate(incident_id,line,machines,evidence,hyps,signature,rag_results,context)
 
     if not hyps:
         draft = _abstain_draft(incident_id, evidence, scored)
@@ -173,6 +179,7 @@ def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, 
     text = {h["rank"]: h for h in final["hypotheses"]}
     w, kpis = evidence.get("window"), evidence.get("kpis")
     response = AnalysisResponse(
+        investigation=investigation,
         documents_accessed=accessed,documents_filtered_out=filtered,
         retrieval_status={str(r):v['embedding_status'] for r,v in rag_results.items()},
         text_source=source,
@@ -204,7 +211,7 @@ def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, 
         rca_draft=final["rca_draft"],
         grounding=grounding,
     )
-    meta = {"llm_calls":llm.calls(), "text_source": source, "retrieved_sops": {r: [s["doc_id"] for s in v] for r, v in retrieved.items()},
+    meta = {"trace":trace, "llm_calls":llm.calls(), "text_source": source, "retrieved_sops": {r: [s["doc_id"] for s in v] for r, v in retrieved.items()},
             "signature": signature}
     log.info("analysis %s: status=%s text_source=%s grounding=%s", incident_id, scored["status"], source, grounding.passed)
     return response, meta

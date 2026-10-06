@@ -78,9 +78,10 @@ def all_cases() -> list[dict]:
         return [{**c.data, "case_id":c.case_id, "source_incident_id":c.source_incident_id} for c in session.scalars(select(Case).where(Case.status == "approved"))]
 
 
-def recall(signature: list[str], exclude_incident_id: str | None = None, top_k: int = TOP_K) -> list[SimilarCase]:
+def recall(signature: list[str], exclude_incident_id: str | None = None, top_k: int = TOP_K, context: dict | None = None) -> list[SimilarCase]:
     sig = set(signature)
     scored = []
+    context=context or {}
     for case in all_cases():
         if exclude_incident_id and case.get("source_incident_id") == exclude_incident_id:
             continue
@@ -88,14 +89,19 @@ def recall(signature: list[str], exclude_incident_id: str | None = None, top_k: 
         shared = sig & tags
         if len(shared) < MIN_SHARED:
             continue
-        jaccard = len(shared) / len(sig | tags)
-        scored.append((jaccard, len(shared), case, sorted(shared)))
+        score=3*len(shared)/max(1,len(sig|tags));reasons=[f'{len(shared)} shared signal tags']
+        for field,weight in [('machine_uid',5),('line',2),('model',1),('confirmed_category',4),('confirmed_subcause',2)]:
+            if context.get(field) and context[field]==case.get(field):score+=weight;reasons.append(field+' agrees')
+        event_shared=set(context.get('events',[])) & set(case.get('events',[]))
+        if event_shared:score+=len(event_shared);reasons.append('shared events: '+', '.join(sorted(event_shared)))
+        scored.append((score, len(shared), case, sorted(shared),reasons))
     scored.sort(key=lambda r: (-r[0], -r[1], r[2]["case_id"]))
     return [
         SimilarCase(case_id=c["case_id"], confirmed_category=c["confirmed_category"],
+                    label=c.get('label','synthetic seed'),fix_applied=c.get('fix_applied',''),match_reasons=reasons,
                     confirmed_subcause=c.get("confirmed_subcause"), shared_signals=shared,
                     similarity_description=f"Shares {len(shared)} of {len(c.get('signals', []))} key signals with {c['case_id']}.")
-        for _, _, c, shared in scored[:top_k]
+        for _, _, c, shared, reasons in scored[:top_k]
     ]
 
 

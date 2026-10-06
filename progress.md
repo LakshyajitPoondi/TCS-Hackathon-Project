@@ -2,7 +2,7 @@
 
 Branch: feature/llm-rag-rbac; baseline on main: 6c6aa2d.
 Stages 0–11 run in sequence; each completed stage has tests and its own commit.
-Current stage: 7, investigation and approved memory. Next unfinished stage: 7.
+Current stage: 8, grounding. Next unfinished stage: 8.
 
 ## Decisions
 - New request supersedes old plan exclusions (database/auth); deterministic ranking and High/Medium/Low hypotheses remain authoritative.
@@ -17,6 +17,8 @@ Current stage: 7, investigation and approved memory. Next unfinished stage: 7.
 Top1/top3 16/16; abstentions 2/2; ambiguous 3/3. Frontend typecheck and bundle passed. Historical findings in audit_report.md.
 
 ## Stage log
+### Stage 7 complete
+27 tests passed. Read-only capped HTTP/fake/deterministic tool loop; authorized search and chunk reads; persisted traces/history APIs; weighted physical-machine/category/signal/event recall; transactional proposed/approved/rejected case workflow. Tests verify malicious cross-machine tool denial, stable scores, cap, trace shape, approval and current-incident exclusion. Seed fixes are explicitly synthetic, not repairs. Decision: memory summaries use deterministic structured templates so engineer-provided confirmed facts remain authoritative. Next unfinished stage: 8.
 
 ## Verification limits
 Live model/judge: Unverified (no key). Fastembed inference must be attempted; default lexical-only retrieval.

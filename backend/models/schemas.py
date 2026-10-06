@@ -115,6 +115,9 @@ class MachineHealth(BaseModel):
 
 
 class SimilarCase(BaseModel):
+    label: str = 'synthetic seed'
+    fix_applied: str = ''
+    match_reasons: list[str] = Field(default_factory=list)
     case_id: str
     confirmed_category: Category  # past, engineer-validated case
     confirmed_subcause: Subcause = None
@@ -128,6 +131,7 @@ class Grounding(BaseModel):
 
 
 class AnalysisResponse(BaseModel):
+    investigation: dict = Field(default_factory=dict)
     documents_accessed: list[dict] = Field(default_factory=list)
     documents_filtered_out: list[dict] = Field(default_factory=list)
     retrieval_status: dict = Field(default_factory=dict)
@@ -158,6 +162,9 @@ class AnalysisResponse(BaseModel):
 # ---------- Cases ----------
 
 class SaveCaseRequest(BaseModel):
+    fix_applied: str = Field(min_length=3, max_length=4000)
+    lessons: str = Field(default='', max_length=4000)
+    documents_used: list[str] = Field(default_factory=list)
     incident_id: str
     rca_draft: str
     confirmed_category: Category
@@ -174,5 +181,5 @@ class SaveCaseRequest(BaseModel):
 
 
 class SaveCaseResponse(BaseModel):
-    status: Literal["saved"]
+    status: Literal["proposed"]
     case_id: str
