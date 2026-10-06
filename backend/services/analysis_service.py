@@ -123,6 +123,7 @@ def _llm_input(incident_id, evidence, hyps, retrieved, similar) -> dict:
 def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, dict]:
     """Returns (response, meta). meta = {text_source, retrieved_sops{rank: [ids]}, signature}."""
     evidence = analyze_signals(df)
+    llm.reset_calls()
     scored = score_hypotheses(evidence)
     hyps = scored["hypotheses"]
     signature = build_signature(evidence)
@@ -163,6 +164,7 @@ def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, 
     text = {h["rank"]: h for h in final["hypotheses"]}
     w, kpis = evidence.get("window"), evidence.get("kpis")
     response = AnalysisResponse(
+        text_source=source,
         incident_id=incident_id,
         analysis_status=scored["status"],
         incident_window=IncidentWindow(start=w["start"], end=w["end"], detected_by=w["detected_by"]) if w else None,
@@ -190,7 +192,7 @@ def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, 
         rca_draft=final["rca_draft"],
         grounding=grounding,
     )
-    meta = {"text_source": source, "retrieved_sops": {r: [s["id"] for s in v] for r, v in retrieved.items()},
+    meta = {"llm_calls":llm.calls(), "text_source": source, "retrieved_sops": {r: [s["id"] for s in v] for r, v in retrieved.items()},
             "signature": signature}
     log.info("analysis %s: status=%s text_source=%s grounding=%s", incident_id, scored["status"], source, grounding.passed)
     return response, meta

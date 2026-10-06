@@ -66,6 +66,8 @@ class Evidence(BaseModel):
 
 
 class VerificationStep(BaseModel):
+    chunk_id: str | None = None
+    page_or_section: str | None = None
     step: str
     source: str  # SOP id, e.g. "SOP-007"
     source_title: str
@@ -126,6 +128,11 @@ class Grounding(BaseModel):
 
 
 class AnalysisResponse(BaseModel):
+    documents_accessed: list[dict] = Field(default_factory=list)
+    documents_filtered_out: list[dict] = Field(default_factory=list)
+    retrieval_status: dict = Field(default_factory=dict)
+    run_id: str | None = None
+    text_source: Literal['llm', 'template'] = 'template'
     incident_id: str
     analysis_status: AnalysisStatus
     incident_window: IncidentWindow | None
