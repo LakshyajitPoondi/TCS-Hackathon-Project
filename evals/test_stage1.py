@@ -8,19 +8,17 @@ from backend.services.data_loader import validate_dataframe, IncidentValidationE
 from evals.sanity_check import run
 
 @pytest.mark.parametrize("column,value", [("defect_count", "inf"), ("defect_count", "-2"), ("downtime_min", "-4"), ("defect_count", "1.5"), ("speed", "900000"), ("temperature", "")])
-def test_invalid_csv(column, value):
+def test_invalid_csv(column, value, client):
     df = pd.read_csv("data/incidents/incident_001.csv", dtype=str)
     df[column] = value
     if column == "temperature":
         df.loc[0, column] = "65"
-    client = TestClient(app)
     response = client.post("/api/incidents/upload", files={"file": ("probe.csv", df.to_csv(index=False).encode())})
     assert response.status_code == 422
     assert response.headers["X-Request-ID"]
 
-def test_extension_and_limit(monkeypatch):
+def test_extension_and_limit(monkeypatch, client):
     from backend.core import config
-    client = TestClient(app)
     content = Path("data/incidents/incident_001.csv").read_bytes()
     assert client.post("/api/incidents/upload", files={"file": ("probe.txt", content)}).status_code == 422
     monkeypatch.setattr(config, "UPLOAD_MAX_MB", .00001)
@@ -34,11 +32,11 @@ def test_safe_missing_shift():
     from engine.scoring import _shift_ev
     assert _shift_ev({"machine_stats":{"m":{"temperature":{"baseline":{"mean":None},"window":{"mean":None},"delta_abs":None}}}}, "m", "temperature") is None
 
-def test_error_json():
+def test_error_json(client):
     from backend.api.routes import incidents
     from unittest.mock import patch
     with patch.object(incidents.data_loader, "list_incidents", side_effect=RuntimeError("private detail")):
-        response=TestClient(app, raise_server_exceptions=False).get("/api/incidents")
+        response=client.get("/api/incidents")
         assert response.status_code == 500
         assert response.json()["request_id"] == response.headers["X-Request-ID"]
         assert "private" not in response.text

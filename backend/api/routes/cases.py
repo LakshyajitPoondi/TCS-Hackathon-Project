@@ -1,6 +1,7 @@
 from datetime import date
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from backend.auth import require
 
 from backend.models.schemas import SaveCaseRequest, SaveCaseResponse
 from backend.services.data_loader import load_incident
@@ -11,7 +12,7 @@ router = APIRouter(prefix="/api/cases", tags=["cases"])
 
 
 @router.post("", response_model=SaveCaseResponse)
-def save_case(request: SaveCaseRequest):
+def save_case(request: SaveCaseRequest, user=Depends(require("propose"))):
     df = load_incident(request.incident_id)  # unknown id -> 404 via IncidentNotFoundError
     sub = f"/{request.confirmed_subcause}" if request.confirmed_subcause else ""
     case_id = retain({
@@ -25,4 +26,6 @@ def save_case(request: SaveCaseRequest):
         "notes": request.notes,
         "draft": request.rca_draft,  # display only; not used for matching
     })
+    from backend import db
+    with db.Session.begin() as session: db.audit(session,user.id,"save_case",{"case_id":case_id})
     return SaveCaseResponse(status="saved", case_id=case_id)

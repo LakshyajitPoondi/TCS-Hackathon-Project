@@ -1,4 +1,6 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
+from backend.auth import require
+from backend.api.routes import auth
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import logging
@@ -44,7 +46,7 @@ async def _invalid(_: Request, exc: IncidentValidationError):
     return JSONResponse(status_code=422, content={"detail": str(exc)})
 
 
-@app.get("/")
+@app.get("/", dependencies=[Depends(require("view"))])
 def root():
     return {"name": API_NAME, "status": "ok", "version": API_VERSION}
 
@@ -55,4 +57,5 @@ def health():
 
 
 for module in (incidents, analysis, cases, evals, sops):
-    app.include_router(module.router)
+    app.include_router(module.router, dependencies=[Depends(require("view"))])
+app.include_router(auth.router)
