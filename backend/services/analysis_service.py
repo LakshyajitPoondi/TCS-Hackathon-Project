@@ -88,7 +88,7 @@ def _template_draft(incident_id: str, evidence: dict, hyps: list[dict], steps: d
 
 
 def _abstain_draft(incident_id: str, evidence: dict, scored: dict) -> str:
-    sops = [get_sop(TRIAGE_SOP)] + ([get_sop(MEASUREMENT_SOP)] if evidence.get("deviating_pairs") else [])
+    sops = []
     lines = [f"RCA draft: {incident_id}", "", "Status: Insufficient evidence - additional verification required.", "",
              "Incident summary:", _summary_line(evidence) if evidence.get("kpis") else "No KPIs available."]
     reason = evidence.get("reason") or scored.get("abstain_reason")
@@ -116,6 +116,7 @@ def _llm_input(incident_id, evidence, hyps, retrieved, similar) -> dict:
             "target_machine": h.get("target"), "supporting_evidence": strip(h["supporting_evidence"]),
             "contradicting_evidence": strip(h["contradicting_evidence"]), "missing_checks": h["missing_checks"],
             "sops": [{"id": s["doc_id"], "title": s["title"], "steps": [s['text']], "chunk_id":s['chunk_id']} for s in retrieved[h["rank"]]],
+            "chunks": retrieved[h['rank']],
         } for h in hyps],
         "similar_cases": [c.model_dump() for c in similar],
         "validation_warning": WARNING,
@@ -143,8 +144,12 @@ def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, 
 
     if not hyps:
         draft = _abstain_draft(incident_id, evidence, scored)
+        steps=retrieval.verification_steps(rag_results[0]['hits'])
+        draft=draft.replace(WARNING,'')+'\n'+ '\n'.join(s['step'] for s in steps)+'\n'+WARNING
         final = {"hypotheses": [], "rca_draft": draft}
-        grounding, source, retrieved = Grounding(passed=True, flagged=[]), "template", {}
+        observed=[e for c in CATEGORIES for e in scored['category_evidence'][c]['supporting']]
+        grounding,_=check_detailed(final,{'kpis':evidence.get('kpis',{}),'observed_evidence':observed,'chunks':rag_results[0]['hits']},{})
+        source, retrieved = 'template', {}
     else:
         triage = _needs_triage(evidence)
         retrieved = {h['rank']:rag_results[h['rank']]['hits'] for h in hyps}
@@ -175,6 +180,11 @@ def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, 
             } for r in tpl_by_rank],
             "rca_draft": template["rca_draft"] if bad["draft"] else final["rca_draft"],
         }
+        for section in grounding.sections:
+            match=__import__('re').search(r'hypothesis (\d+) (narrative|step)',section['section'])
+            section['replaced']=bool(match and int(match[1]) in bad['narrative' if match[2]=='narrative' else 'steps']) or (section['section']=='rca_draft' and bad['draft'])
+        final_check,_=check_detailed(final,llm_input,retrieved_ids)
+        grounding.passed=final_check.passed
 
     text = {h["rank"]: h for h in final["hypotheses"]}
     w, kpis = evidence.get("window"), evidence.get("kpis")

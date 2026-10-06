@@ -2,7 +2,7 @@
 
 Branch: feature/llm-rag-rbac; baseline on main: 6c6aa2d.
 Stages 0–11 run in sequence; each completed stage has tests and its own commit.
-Current stage: 8, grounding. Next unfinished stage: 8.
+Current stage: 9, frontend. Next unfinished stage: 9.
 
 ## Decisions
 - New request supersedes old plan exclusions (database/auth); deterministic ranking and High/Medium/Low hypotheses remain authoritative.
@@ -17,6 +17,8 @@ Current stage: 8, grounding. Next unfinished stage: 8.
 Top1/top3 16/16; abstentions 2/2; ambiguous 3/3. Frontend typecheck and bundle passed. Historical findings in audit_report.md.
 
 ## Stage log
+### Stage 8 complete
+29 pytest tests passed. Numeric pools exclude identifier digits; signal assertions bind direction/machine/value; actions require a retrieved doc+chunk and quoted text. Both audit probes flagged. Replaced sections and flags are reported; final replacement is rechecked. Abstention drafts are checked too. Decision: conservative exact normalized action quotes rather than permissive paraphrase matching. Next unfinished stage: 9.
 ### Stage 7 complete
 27 tests passed. Read-only capped HTTP/fake/deterministic tool loop; authorized search and chunk reads; persisted traces/history APIs; weighted physical-machine/category/signal/event recall; transactional proposed/approved/rejected case workflow. Tests verify malicious cross-machine tool denial, stable scores, cap, trace shape, approval and current-incident exclusion. Seed fixes are explicitly synthetic, not repairs. Decision: memory summaries use deterministic structured templates so engineer-provided confirmed facts remain authoritative. Next unfinished stage: 8.
 

@@ -126,6 +126,7 @@ class SimilarCase(BaseModel):
 
 
 class Grounding(BaseModel):
+    sections: list[dict] = Field(default_factory=list)
     passed: bool
     flagged: list[str]
 
