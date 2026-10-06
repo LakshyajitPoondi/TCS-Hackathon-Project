@@ -2,7 +2,7 @@
 
 Branch: feature/llm-rag-rbac; baseline on main: 6c6aa2d.
 Stages 0–11 run in sequence; each completed stage has tests and its own commit.
-Current stage: 6, machine-aware retrieval. Next unfinished stage: 6.
+Current stage: 7, investigation and approved memory. Next unfinished stage: 7.
 
 ## Decisions
 - New request supersedes old plan exclusions (database/auth); deterministic ranking and High/Medium/Low hypotheses remain authoritative.
@@ -41,4 +41,7 @@ Copied planning documents, created main baseline/feature branch, installed all r
 
 ### Stage 5 complete
 Provider tests: 5 passed; prior 18 regression cases passed in the combined run (one new test used a wrong incident ID, corrected and retested). Plain HTTP Groq/OpenAI-compatible/Anthropic, fake provider, schema/retry/fallback, versioned cache and persisted per-call telemetry added. All responses expose llm/template; a cache hit is llm. Live calls Unverified. Decision: separate test temp directories when runs overlap; SQLite fixtures must finish before reuse. Next unfinished stage: 6.
+
+### Stage 6 complete
+25 pytest cases passed. Active SQLite chunk BM25, hard machine/model/line/plant filter, scope tie priority, top-k/min-score, embedding vectors in SQLite and cosine/RRF added. Analysis returns accessed and excluded document provenance and chunk citations. Mocked embedding inference passed, provider failure falls back to lexical. Actual fastembed model inference remains Unverified until attempted in final verification. Next unfinished stage: 7.
 

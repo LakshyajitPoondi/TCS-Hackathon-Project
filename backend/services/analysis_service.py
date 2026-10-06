@@ -22,6 +22,7 @@ from backend.models.schemas import (
     VerificationStep,
 )
 from engine import llm
+from engine import retrieval
 from engine.grounding import check_detailed
 from engine.memory import build_signature, recall
 from engine.rag import SOP_INDEX, TRIAGE_SOP, get_sop, retrieve_for_hypothesis
@@ -80,7 +81,7 @@ def _template_draft(incident_id: str, evidence: dict, hyps: list[dict], steps: d
               "Missing verification:"]
     lines += [f"- {m}" for m in top["missing_checks"]]
     lines += ["", "Verification actions:"]
-    lines += [f"- {s['step']} ({s['source']} {SOP_INDEX[s['source']]['title']})" for s in steps[top["rank"]]]
+    lines += [f"- {s['step']} ({s['source']}, {s.get('chunk_id', '')})" for s in steps[top["rank"]]]
     lines += ["", WARNING]
     return "\n".join(lines)
 
@@ -113,7 +114,7 @@ def _llm_input(incident_id, evidence, hyps, retrieved, similar) -> dict:
             "rank": h["rank"], "category": h["category"], "subcause": h["subcause"], "confidence": h["confidence"],
             "target_machine": h.get("target"), "supporting_evidence": strip(h["supporting_evidence"]),
             "contradicting_evidence": strip(h["contradicting_evidence"]), "missing_checks": h["missing_checks"],
-            "sops": [{"id": s["id"], "title": s["title"], "steps": s["steps"]} for s in retrieved[h["rank"]]],
+            "sops": [{"id": s["doc_id"], "title": s["title"], "steps": [s['text']], "chunk_id":s['chunk_id']} for s in retrieved[h["rank"]]],
         } for h in hyps],
         "similar_cases": [c.model_dump() for c in similar],
         "validation_warning": WARNING,
@@ -128,6 +129,11 @@ def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, 
     hyps = scored["hypotheses"]
     signature = build_signature(evidence)
     similar = recall(signature, exclude_incident_id=incident_id)
+    line=str(df['line'].iloc[0]);machines=sorted(df['machine'].unique())
+    rag_results={h['rank']:retrieval.for_hypothesis(h,line,machines) for h in hyps}
+    if not hyps:
+        rag_results={0:retrieval.search([line+'/'+m for m in machines],'incident triage measurement verification')}
+    accessed,filtered=retrieval.provenance(rag_results)
 
     if not hyps:
         draft = _abstain_draft(incident_id, evidence, scored)
@@ -135,17 +141,20 @@ def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, 
         grounding, source, retrieved = Grounding(passed=True, flagged=[]), "template", {}
     else:
         triage = _needs_triage(evidence)
-        retrieved = {h["rank"]: _retrieve(h, triage) for h in hyps}
-        tpl_steps = {h["rank"]: _template_steps(retrieved[h["rank"]], triage) for h in hyps}
+        retrieved = {h['rank']:rag_results[h['rank']]['hits'] for h in hyps}
+        tpl_steps = {h['rank']:retrieval.verification_steps(retrieved[h['rank']]) for h in hyps}
         template = {
             "hypotheses": [{"rank": h["rank"], "narrative": h["narrative"], "verification_steps": tpl_steps[h["rank"]]}
                            for h in hyps],
             "rca_draft": _template_draft(incident_id, evidence, hyps, tpl_steps),
         }
         llm_input = _llm_input(incident_id, evidence, hyps, retrieved, similar)
+        llm_input['template_draft']=template['rca_draft']
+        for h, t in zip(llm_input['hypotheses'], template['hypotheses']):
+            h['template_narrative']=t['narrative'];h['template_steps']=t['verification_steps']
         out, source = llm.generate(incident_id, llm_input)
         final = out or template
-        retrieved_ids = {r: [s["id"] for s in sops] for r, sops in retrieved.items()}
+        retrieved_ids = {r: [s["doc_id"] for s in sops] for r, sops in retrieved.items()}
         grounding, bad = check_detailed(final, llm_input, retrieved_ids)
         if source == "llm" and grounding.passed:
             llm.save_cache(incident_id, llm_input, final)
@@ -164,6 +173,8 @@ def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, 
     text = {h["rank"]: h for h in final["hypotheses"]}
     w, kpis = evidence.get("window"), evidence.get("kpis")
     response = AnalysisResponse(
+        documents_accessed=accessed,documents_filtered_out=filtered,
+        retrieval_status={str(r):v['embedding_status'] for r,v in rag_results.items()},
         text_source=source,
         incident_id=incident_id,
         analysis_status=scored["status"],
@@ -181,8 +192,9 @@ def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, 
                 score=h["score"], supporting_evidence=[Evidence(**e) for e in h["supporting_evidence"]],
                 contradicting_evidence=[Evidence(**e) for e in h["contradicting_evidence"]],
                 missing_checks=h["missing_checks"],
-                verification_steps=[VerificationStep(step=s["step"], source=s["source"],
-                                                     source_title=SOP_INDEX[s["source"]]["title"])
+                verification_steps=[VerificationStep(step=s["step"], source=s["source"],chunk_id=s.get('chunk_id'),
+                                                     source_title=next((hit['title'] for hit in retrieved[h['rank']] if hit['doc_id']==s['source']),s['source']),
+                                                     page_or_section=next((hit['page_or_section'] for hit in retrieved[h['rank']] if hit['chunk_id']==s.get('chunk_id')),None))
                                     for s in text[h["rank"]]["verification_steps"]],
                 narrative=text[h["rank"]]["narrative"],
             )
@@ -192,7 +204,7 @@ def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, 
         rca_draft=final["rca_draft"],
         grounding=grounding,
     )
-    meta = {"llm_calls":llm.calls(), "text_source": source, "retrieved_sops": {r: [s["id"] for s in v] for r, v in retrieved.items()},
+    meta = {"llm_calls":llm.calls(), "text_source": source, "retrieved_sops": {r: [s["doc_id"] for s in v] for r, v in retrieved.items()},
             "signature": signature}
     log.info("analysis %s: status=%s text_source=%s grounding=%s", incident_id, scored["status"], source, grounding.passed)
     return response, meta
