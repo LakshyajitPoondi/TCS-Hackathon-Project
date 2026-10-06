@@ -23,6 +23,8 @@ def _pool(payload):
     def add(text):values.extend(float(n) for n in _numbers(str(text)))
     for v in payload.get('kpis',{}).values():
         if isinstance(v,(int,float)):values.append(float(v))
+    for v in payload.get('scoring_policy',{}).values():
+        if isinstance(v,(int,float)):values.append(float(v))
     for h in payload.get('hypotheses',[]):
         for e in h.get('supporting_evidence',[])+h.get('contradicting_evidence',[]):
             add(e.get('description',''))
@@ -42,9 +44,10 @@ def check_detailed(output,payload,retrieved_ids):
         match=BANNED.search(text.replace(WARNING,''))
         if match:errors.append(f"Unsupported certainty '{match.group()}' in {where}")
         if evidence is not None:
-            for sentence in re.split(r'(?<=[.!?])\s+|\n',text):
+            for sentence in re.split(r'(?<=[.!?])\s+|\n|[,;]',text):
+                if any(_norm(sentence) and _norm(sentence) in _norm(e.get('description','')) for e in evidence):continue
                 # Verification requests and conditional document statements are not observed signal claims.
-                if re.search(r'\b(?:check|inspect|verify|compare|record|whether|if|should|would|may)\b',sentence,re.I):continue
+                if re.search(r'^\s*[-*]?\s*(?:check|inspect|verify|compare|record|review|confirm|take|quarantine|if)\b',sentence,re.I):continue
                 for signal,pattern in SIGNALS.items():
                     if not re.search(r'\b'+pattern+r'\b',sentence,re.I):continue
                     direction='up' if UP.search(sentence) else 'down' if DOWN.search(sentence) else None
@@ -57,7 +60,7 @@ def check_detailed(output,payload,retrieved_ids):
                         candidates=[e for e in candidates if (UP if direction=='up' else DOWN).search(e.get('description',''))]
                     associated=[float(n) for e in candidates for n in _numbers(e.get('description',''))]
                     associated += [float(e['value']) for e in candidates if isinstance(e.get('value'),(float,int))]
-                    if not candidates or any(not _supported(n,associated) for n in numeric):errors.append(f'Unsupported {signal} direction/machine/value in {where}')
+                    if not candidates or any(not _supported(n,associated) for n in numeric):errors.append(f'Unsupported {signal} direction/machine/value in {where}: {sentence[:160]}')
         flagged.extend(errors);sections.append({'section':where,'passed':not errors,'flagged':errors,'replaced':False})
         return not errors
     all_evidence=[]
@@ -73,7 +76,7 @@ def check_detailed(output,payload,retrieved_ids):
             chunk=chunks.get(step.get('chunk_id'))
             if step.get('source') not in retrieved_ids.get(rank,[]) or not chunk or chunk['doc_id']!=step.get('source'):
                 flagged.append(f'{where} does not cite a retrieved chunk')
-            elif _norm(step['step']) not in _norm(chunk['text']):
+            elif _norm(re.sub(r'^Review reference:\s*','',step['step'])) not in _norm(chunk['text']):
                 # Conservative grounding accepts quotes; free paraphrases fall back safely.
                 flagged.append(f'{where} action is not supported by its retrieved chunk')
             if len(flagged)>start:

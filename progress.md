@@ -2,7 +2,7 @@
 
 Branch: feature/llm-rag-rbac; baseline on main: 6c6aa2d.
 Stages 0–11 run in sequence; each completed stage has tests and its own commit.
-Current stage: 10, evaluations. Next unfinished stage: 10.
+Current stage: 11, final verification and report. Next unfinished stage: 11.
 
 ## Decisions
 - New request supersedes old plan exclusions (database/auth); deterministic ranking and High/Medium/Low hypotheses remain authoritative.
@@ -17,6 +17,9 @@ Current stage: 10, evaluations. Next unfinished stage: 10.
 Top1/top3 16/16; abstentions 2/2; ambiguous 3/3. Frontend typecheck and bundle passed. Historical findings in audit_report.md.
 
 ## Stage log
+### Stage 10 complete
+All eight deterministic suites pass; ninth optional live judge is explicitly Unverified. Ranking 16/16, abstentions 2/2, ambiguity alternatives 3/3. Mapping precision/recall/status/conflict/ambiguity 1.0; retrieval recall@4 0.85185, MRR 1.0, wrong-machine leaks 0; final grounded sections/cited steps/adversarial probes 1.0; fake/mocked HTTP provider cases 1.0; agent validity/cap/trace/shape 1.0 and scope attempts 0; memory LOO category agreement 10/12, current exclusion and approval role checks 1.0; full HTTP role matrix 1.0. Combined pytest initially found two new failures (grounding false positive + scan regex false match), fixed; focused 5 tests passed, earlier 30 passed. Final full pytest follows in stage 11.
+Decisions: isolated evaluation subprocess DBs prevent fixture/config interference with application users; nested eval computation is stubbed only in RBAC matrix to prevent recursion. Synthetic chiller references reuse known machine UIDs instead of inventing machine IDs. Evaluation fixtures are generated under data/eval_docs; labels stay in evals. Numeric scoring policy is supplied explicitly; direction checks operate on clauses so a defect increase does not assert rising temperature. Next unfinished stage: 11.
 ### Stage 9 complete
 Frontend TypeScript and production build passed. Real login/session guard, role controls, machine registry/detail/spec editing, scoped document upload/detection/confirmation/library/chunk viewer, analysis provenance/source/grounding/trace, persisted analysis for viewers, case proposal/review and admin users pages implemented. Evaluations UI expects final stored suite shape. Light tokens and labelled robot placeholder retained. Browser end-to-end verification is scheduled in stage 11; bundle warning is informational (charts dominate). Next unfinished stage: 10.
 ### Stage 8 complete

@@ -17,3 +17,4 @@ data/documents/
 data/embedding_cache/
 .cache/
 
+*.tsbuildinfo

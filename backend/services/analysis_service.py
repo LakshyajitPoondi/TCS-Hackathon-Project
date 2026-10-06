@@ -27,7 +27,7 @@ from engine.agent import investigate
 from engine.grounding import check_detailed
 from engine.memory import build_signature, recall
 from engine.rag import SOP_INDEX, TRIAGE_SOP, get_sop, retrieve_for_hypothesis
-from engine.scoring import CATEGORIES, score_hypotheses
+from engine.scoring import CATEGORIES, MIN_SCORE, score_hypotheses
 from engine.signals import analyze_signals
 
 log = logging.getLogger("rca.analysis")
@@ -108,6 +108,7 @@ def _llm_input(incident_id, evidence, hyps, retrieved, similar) -> dict:
     strip = lambda evs: [{"description": e["description"], "machine": e["machine"], "value": e["value"]} for e in evs]  # noqa: E731
     return {
         "incident_id": incident_id,
+        "scoring_policy":{'minimum_score':MIN_SCORE},
         "window": {"start": w["start"], "end": w["end"], "detected_by": w["detected_by"]} if w else None,
         "kpis": {f: evidence["kpis"][f] for f in KPI_FIELDS},
         "machine_health": evidence.get("health", []),
@@ -148,14 +149,14 @@ def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, 
         draft=draft.replace(WARNING,'')+'\n'+ '\n'.join(s['step'] for s in steps)+'\n'+WARNING
         final = {"hypotheses": [], "rca_draft": draft}
         observed=[e for c in CATEGORIES for e in scored['category_evidence'][c]['supporting']]
-        grounding,_=check_detailed(final,{'kpis':evidence.get('kpis',{}),'observed_evidence':observed,'chunks':rag_results[0]['hits']},{})
+        grounding,_=check_detailed(final,{'scoring_policy':{'minimum_score':MIN_SCORE},'kpis':evidence.get('kpis',{}),'observed_evidence':observed,'chunks':rag_results[0]['hits']},{})
         source, retrieved = 'template', {}
     else:
         triage = _needs_triage(evidence)
         retrieved = {h['rank']:rag_results[h['rank']]['hits'] for h in hyps}
         tpl_steps = {h['rank']:retrieval.verification_steps(retrieved[h['rank']]) for h in hyps}
         template = {
-            "hypotheses": [{"rank": h["rank"], "narrative": h["narrative"], "verification_steps": tpl_steps[h["rank"]]}
+            "hypotheses": [{"rank": h["rank"], "narrative": f"The {_hyp_name(h)} hypothesis requires verification. "+' '.join(e['description'] for e in h['supporting_evidence'][:3]), "verification_steps": tpl_steps[h["rank"]]}
                            for h in hyps],
             "rca_draft": _template_draft(incident_id, evidence, hyps, tpl_steps),
         }

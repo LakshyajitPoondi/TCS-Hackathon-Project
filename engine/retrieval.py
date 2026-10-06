@@ -88,7 +88,7 @@ def verification_steps(hits):
     steps=[]
     for hit in hits:
         matches=re.findall(r'(?:^|\s)\d+\.\s+(.+?)(?=\s\d+\.\s|$)',hit['text'])
-        chosen=matches[:2] or [hit['text'][:400]]
+        chosen=matches[:2] or ['Review reference: '+hit['text'][:400]]
         for text in chosen:
             steps.append({'step':text,'source':hit['doc_id'],'chunk_id':hit['chunk_id']})
         if len(steps)>=3:break
