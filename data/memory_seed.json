@@ -1,0 +1,198 @@
+[
+  {
+    "case_id": "INC-H01",
+    "date": "2025-12-27",
+    "line": "LINE-C",
+    "machine": "IMM-01",
+    "signals": [
+      "alarm_temp_hi",
+      "defects_up",
+      "note_heat",
+      "speed_down"
+    ],
+    "confirmed_category": "machine",
+    "confirmed_subcause": "cooling",
+    "sop": "SOP-007",
+    "summary": "Engineer-validated machine/cooling case."
+  },
+  {
+    "case_id": "INC-H02",
+    "date": "2026-01-24",
+    "line": "LINE-B",
+    "machine": "IMM-02",
+    "signals": [
+      "alarm_temp_hi",
+      "defects_up",
+      "note_heat",
+      "speed_down",
+      "temp_up"
+    ],
+    "confirmed_category": "machine",
+    "confirmed_subcause": "cooling",
+    "sop": "SOP-007",
+    "summary": "Engineer-validated machine/cooling case."
+  },
+  {
+    "case_id": "INC-H03",
+    "date": "2025-12-20",
+    "line": "LINE-A",
+    "machine": "IMM-03",
+    "signals": [
+      "alarm_vib_hi",
+      "current_up",
+      "defects_up",
+      "note_noise",
+      "speed_jitter",
+      "single_machine"
+    ],
+    "confirmed_category": "machine",
+    "confirmed_subcause": "mechanical",
+    "sop": "SOP-004",
+    "summary": "Engineer-validated machine/mechanical case."
+  },
+  {
+    "case_id": "INC-H04",
+    "date": "2026-01-07",
+    "line": "LINE-B",
+    "machine": "IMM-02",
+    "signals": [
+      "current_up",
+      "defects_up",
+      "note_noise",
+      "speed_jitter",
+      "vibration_up"
+    ],
+    "confirmed_category": "machine",
+    "confirmed_subcause": "mechanical",
+    "sop": "SOP-004",
+    "summary": "Engineer-validated machine/mechanical case."
+  },
+  {
+    "case_id": "INC-H05",
+    "date": "2025-07-17",
+    "line": "LINE-C",
+    "machine": "IMM-01",
+    "signals": [
+      "batch_concentration",
+      "defects_up_all_machines",
+      "note_lot",
+      "sensors_normal"
+    ],
+    "confirmed_category": "material",
+    "confirmed_subcause": null,
+    "sop": "SOP-012",
+    "summary": "Engineer-validated material case."
+  },
+  {
+    "case_id": "INC-H06",
+    "date": "2025-08-04",
+    "line": "LINE-C",
+    "machine": "IMM-03",
+    "signals": [
+      "batch_concentration",
+      "defects_up_all_machines",
+      "note_lot",
+      "defects_up"
+    ],
+    "confirmed_category": "material",
+    "confirmed_subcause": null,
+    "sop": "SOP-012",
+    "summary": "Engineer-validated material case."
+  },
+  {
+    "case_id": "INC-H07",
+    "date": "2025-06-22",
+    "line": "LINE-C",
+    "machine": "IMM-02",
+    "signals": [
+      "chg_precedes_rise",
+      "defects_up",
+      "sensors_normal",
+      "single_machine",
+      "speed_setpoint_shift"
+    ],
+    "confirmed_category": "method",
+    "confirmed_subcause": null,
+    "sop": "SOP-018",
+    "summary": "Engineer-validated method case."
+  },
+  {
+    "case_id": "INC-H08",
+    "date": "2025-08-17",
+    "line": "LINE-A",
+    "machine": "IMM-01",
+    "signals": [
+      "defects_up",
+      "sensors_normal",
+      "single_machine",
+      "speed_setpoint_shift"
+    ],
+    "confirmed_category": "method",
+    "confirmed_subcause": null,
+    "sop": "SOP-018",
+    "summary": "Engineer-validated method case."
+  },
+  {
+    "case_id": "INC-H09",
+    "date": "2025-10-20",
+    "line": "LINE-B",
+    "machine": "IMM-02",
+    "signals": [
+      "defects_up",
+      "note_calibration",
+      "sensors_normal",
+      "shift_chg_precedes_rise"
+    ],
+    "confirmed_category": "people",
+    "confirmed_subcause": null,
+    "sop": "SOP-021",
+    "summary": "Engineer-validated people case."
+  },
+  {
+    "case_id": "INC-H10",
+    "date": "2025-09-05",
+    "line": "LINE-C",
+    "machine": "IMM-01",
+    "signals": [
+      "note_calibration",
+      "sensors_normal",
+      "shift_chg_precedes_rise",
+      "downtime_up"
+    ],
+    "confirmed_category": "people",
+    "confirmed_subcause": null,
+    "sop": "SOP-021",
+    "summary": "Engineer-validated people case."
+  },
+  {
+    "case_id": "INC-H11",
+    "date": "2025-08-12",
+    "line": "LINE-A",
+    "machine": "IMM-02",
+    "signals": [
+      "defects_baseline",
+      "note_panel_vs_probe",
+      "temp_flatline",
+      "temp_spike"
+    ],
+    "confirmed_category": "measurement",
+    "confirmed_subcause": null,
+    "sop": "SOP-015",
+    "summary": "Engineer-validated measurement case."
+  },
+  {
+    "case_id": "INC-H12",
+    "date": "2026-01-13",
+    "line": "LINE-C",
+    "machine": "IMM-02",
+    "signals": [
+      "defects_up_all_machines",
+      "multi_machine_temp_up",
+      "note_ambient"
+    ],
+    "confirmed_category": "environment",
+    "confirmed_subcause": null,
+    "sop": "SOP-024",
+    "summary": "Engineer-validated environment case."
+  }
+]

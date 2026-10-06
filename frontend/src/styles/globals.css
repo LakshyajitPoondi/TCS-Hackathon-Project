@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+/* Light theme only. Tokens from frontend_design.md §2–4, §10. */
+@theme {
+  --color-*: initial;
+  --color-white: #ffffff;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  --color-indigo-50: #f3f4ff;
+  --color-indigo-100: #e7e9fd;
+  --color-indigo-500: #4652e6;
+  --color-indigo-600: #2e3bd1;
+  --color-indigo-700: #1f2ab3;
+  --color-indigo-900: #141b7a;
+  --color-mint-100: #e6fcf1;
+  --color-mint-300: #b5f7d6;
+  --color-mint-400: #8ef2c2;
+  --color-cyan-400: #3cd7f0;
+  --color-violet-500: #6c5cf2;
+  --color-teal-500: #5e9fae;
+  --color-ink-700: #2a3150;
+  --color-ink-900: #0b1230;
+  --color-slate-100: #f1f3f8;
+  --color-slate-200: #e3e6ef;
+  --color-slate-300: #c9cedd;
+  --color-slate-500: #6b7390;
+  --color-slate-600: #4b5470;
+  --color-surface-alt: #f7f8fc;
+
+  /* Semantic: base tone, a 10% tint, and a darker "ink" shade for text (4.5:1 on white/tint). */
+  --color-success: #12b886;
+  --color-success-tint: #e7f8f2;
+  --color-success-ink: #0a7a4f;
+  --color-warning: #f2a33a;
+  --color-warning-tint: #fef4e6;
+  --color-warning-ink: #8a5300;
+  --color-danger: #e5484d;
+  --color-danger-tint: #fdeced;
+  --color-danger-ink: #b42328;
+  --color-window: rgb(229 72 77 / 0.08);
+
+  --color-conf-high: #1f2ab3;
+  --color-conf-medium: #4652e6;
+  --color-conf-low: #c9cedd;
+
+  --font-sans: "Plus Jakarta Sans", Inter, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  --shadow-nav: 0 8px 30px rgb(11 18 48 / 0.06);
+  --shadow-card: 0 2px 6px rgb(11 18 48 / 0.04), 0 12px 32px rgb(11 18 48 / 0.06);
+  --shadow-hover: 0 4px 10px rgb(11 18 48 / 0.06), 0 20px 48px rgb(31 42 179 / 0.12);
+  --shadow-ring: 0 0 0 4px rgb(70 82 230 / 0.18);
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --container-page: 1320px;
+}
+
+:root {
+  color-scheme: light;
+  --g-aura:
+    radial-gradient(40% 40% at 50% 30%, rgb(108 92 242 / 0.85) 0%, transparent 70%),
+    radial-gradient(45% 45% at 35% 55%, rgb(60 123 240 / 0.75) 0%, transparent 70%),
+    radial-gradient(45% 45% at 65% 60%, rgb(60 215 240 / 0.7) 0%, transparent 70%),
+    radial-gradient(50% 45% at 50% 80%, rgb(142 242 194 / 0.8) 0%, transparent 70%);
+  /* Chart series colours (§6.8), read by Recharts via var(). */
+  --series-1: var(--color-indigo-700);
+  --series-2: var(--color-cyan-400);
+  --series-3: var(--color-violet-500);
+  --series-4: var(--color-teal-500);
+}
+
+html {
+  color-scheme: light;
+  background: var(--color-white);
+}
+body {
+  font-family: var(--font-sans);
+  color: var(--color-slate-600);
+  background: var(--color-white);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-indigo-500);
+  outline-offset: 2px;
+}
+
+.aura {
+  background: var(--g-aura);
+  filter: blur(48px);
+  pointer-events: none;
+}
+
+.fade-in {
+  animation: fade-in 250ms var(--ease-out) both;
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,54 @@
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
+
+/** Error with a human-readable message and the HTTP status (0 = network failure). */
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+const STATUS_MESSAGES: Record<number, string> = {
+  404: "Not found.",
+  422: "The request could not be processed.",
+  500: "The analysis engine hit an internal error. Please try again.",
+  501: "This feature is not available yet.",
+};
+
+/** Turn FastAPI's {"detail": ...} (string or validation list) into one readable line. */
+function readableDetail(detail: unknown): string | null {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d) => (d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : null))
+      .filter(Boolean)
+      .map((m) => (m as string).replace(/^Value error, /, ""));
+    return msgs.length ? msgs.join(" ") : null;
+  }
+  return null;
+}
+
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, init);
+  } catch {
+    throw new ApiError("Backend unavailable. Check that the API server is running.", 0);
+  }
+  if (!res.ok) {
+    let message: string | null = null;
+    try {
+      message = readableDetail((await res.json())?.detail);
+    } catch {
+      /* non-JSON body: fall back to the status message */
+    }
+    if (res.status >= 500 && res.status !== 501) message = STATUS_MESSAGES[500];
+    throw new ApiError(message || STATUS_MESSAGES[res.status] || `Request failed (${res.status}).`, res.status);
+  }
+  return (await res.json()) as T;
+}
+
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "Something went wrong.";
+}
