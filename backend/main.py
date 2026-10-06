@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, Depends
 from backend.auth import require
 from backend.api.routes import auth
+from backend.api.routes import registry
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import logging
@@ -59,3 +60,4 @@ def health():
 for module in (incidents, analysis, cases, evals, sops):
     app.include_router(module.router, dependencies=[Depends(require("view"))])
 app.include_router(auth.router)
+app.include_router(registry.router)

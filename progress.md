@@ -2,7 +2,7 @@
 
 Branch: feature/llm-rag-rbac; baseline on main: 6c6aa2d.
 Stages 0–11 run in sequence; each completed stage has tests and its own commit.
-Current stage: 0, baseline/environment. Next unfinished stage: 0.
+Current stage: 5, provider layer. Next unfinished stage: 5.
 
 ## Decisions
 - New request supersedes old plan exclusions (database/auth); deterministic ranking and High/Medium/Low hypotheses remain authoritative.
@@ -35,4 +35,7 @@ Copied planning documents, created main baseline/feature branch, installed all r
 
 ### Stage 3 complete
 14 pytest tests passed. Login/me/logout, bcrypt, JWT expiry/revocation, admin user creation/role/deactivation and server permissions implemented. All business routes protected; health/docs public. Mutation audits include actor. Decision: absent JWT_SECRET uses process-random secret only in development; persistent/production sessions require configured secret. Next unfinished stage: 4.
+
+### Stage 4 complete
+18 pytest tests passed. Nine physical machines seeded with measured baseline ranges; eight SOPs migrated with their existing IDs. PDF/DOCX/Markdown/TXT extraction, overlapping chunks, scope links, detection suggestions, conflict/ambiguity quarantine and confirmation endpoints implemented. Synthetic manufacturer/model metadata is labelled; no physical model or serial is invented. Next unfinished stage: 5.
 
