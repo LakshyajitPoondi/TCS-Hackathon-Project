@@ -58,6 +58,8 @@ export interface Evidence {
 }
 
 export interface VerificationStep {
+  chunk_id: string|null;
+  page_or_section: string|null;
   step: string;
   source: string;
   source_title: string;
@@ -105,6 +107,9 @@ export interface MachineHealth {
 }
 
 export interface SimilarCase {
+  label:string;
+  fix_applied:string;
+  match_reasons:string[];
   case_id: string;
   confirmed_category: Category;
   confirmed_subcause: Subcause;
@@ -113,11 +118,18 @@ export interface SimilarCase {
 }
 
 export interface Grounding {
+  sections:{section:string;passed:boolean;flagged:string[];replaced:boolean}[];
   passed: boolean;
   flagged: string[];
 }
 
 export interface AnalysisResponse {
+  run_id:string;
+  text_source:'llm'|'template';
+  investigation:{mode:string;steps:number;max_steps:number;capped:boolean;denied_calls:number};
+  retrieval_status:Record<string,string>;
+  documents_accessed:{doc_id:string;title:string;version:string;doc_type:string;scope:string;matched_machine:string[];why_allowed:string;chunks:{chunk_id:string;page_or_section:string;score:number;snippet:string}[];used_for:string[]}[];
+  documents_filtered_out:{doc_id:string;title:string;reason:string}[];
   incident_id: string;
   analysis_status: AnalysisStatus;
   incident_window: IncidentWindow | null;
@@ -135,6 +147,9 @@ export interface AnalysisResponse {
 // ---------- Cases ----------
 
 export interface SaveCaseRequest {
+  fix_applied:string;
+  lessons?:string;
+  documents_used?:string[];
   incident_id: string;
   rca_draft: string;
   confirmed_category: Category;
@@ -143,7 +158,7 @@ export interface SaveCaseRequest {
 }
 
 export interface SaveCaseResponse {
-  status: "saved";
+  status: "proposed";
   case_id: string;
 }
 

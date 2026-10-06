@@ -2,7 +2,7 @@
 
 Branch: feature/llm-rag-rbac; baseline on main: 6c6aa2d.
 Stages 0–11 run in sequence; each completed stage has tests and its own commit.
-Current stage: 9, frontend. Next unfinished stage: 9.
+Current stage: 10, evaluations. Next unfinished stage: 10.
 
 ## Decisions
 - New request supersedes old plan exclusions (database/auth); deterministic ranking and High/Medium/Low hypotheses remain authoritative.
@@ -17,6 +17,8 @@ Current stage: 9, frontend. Next unfinished stage: 9.
 Top1/top3 16/16; abstentions 2/2; ambiguous 3/3. Frontend typecheck and bundle passed. Historical findings in audit_report.md.
 
 ## Stage log
+### Stage 9 complete
+Frontend TypeScript and production build passed. Real login/session guard, role controls, machine registry/detail/spec editing, scoped document upload/detection/confirmation/library/chunk viewer, analysis provenance/source/grounding/trace, persisted analysis for viewers, case proposal/review and admin users pages implemented. Evaluations UI expects final stored suite shape. Light tokens and labelled robot placeholder retained. Browser end-to-end verification is scheduled in stage 11; bundle warning is informational (charts dominate). Next unfinished stage: 10.
 ### Stage 8 complete
 29 pytest tests passed. Numeric pools exclude identifier digits; signal assertions bind direction/machine/value; actions require a retrieved doc+chunk and quoted text. Both audit probes flagged. Replaced sections and flags are reported; final replacement is rechecked. Abstention drafts are checked too. Decision: conservative exact normalized action quotes rather than permissive paraphrase matching. Next unfinished stage: 9.
 ### Stage 7 complete

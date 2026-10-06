@@ -62,7 +62,8 @@ function VerificationSteps({ steps, onOpenSop }: { steps: VerificationStep[]; on
           </span>
           <div className="min-w-0 flex-1 space-y-1.5">
             <p className="break-words text-sm text-ink-700">{s.step}</p>
-            <SopChip source={s.source} title={s.source_title} onOpen={onOpenSop} />
+            <SopChip source={s.source} title={s.source_title} onOpen={id=>onOpenSop(id+(s.chunk_id?'#'+s.chunk_id:''))} />
+            <p className="text-xs text-slate-500">{s.page_or_section}</p>
           </div>
         </li>
       ))}

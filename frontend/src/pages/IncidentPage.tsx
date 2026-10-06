@@ -21,6 +21,9 @@ import { CategoryEvidenceGrid } from "../components/analysis/CategoryEvidenceGri
 import { SimilarCases } from "../components/analysis/SimilarCases";
 import { RcaDraft } from "../components/analysis/RcaDraft";
 import { SaveCaseModal } from "../components/analysis/SaveCaseModal";
+import {useAuth} from '../auth';
+import {request} from '../api/client';
+import {InvestigationPanels} from '../components/analysis/InvestigationPanels';
 
 // UI wording only — not real backend stages.
 const LOADING_LABELS = [
@@ -43,6 +46,7 @@ function useCyclingLabel(active: boolean) {
 
 export function IncidentPage() {
   const { id = "" } = useParams();
+  const {can}=useAuth();
   const { warning, setWarning } = useWarning();
 
   const [summary, setSummary] = useState<IncidentSummary | null>(null);
@@ -63,6 +67,7 @@ export function IncidentPage() {
   useEffect(() => {
     let alive = true;
     activeRun.current++;
+    const historyToken=activeRun.current;
     setAnalyzing(false);
     setSummary(null);
     setSummaryError(null);
@@ -77,6 +82,9 @@ export function IncidentPage() {
     getSignals(id)
       .then((s) => alive && setSignals(s))
       .catch((e) => alive && setSignalsError(errorMessage(e)));
+    request<{run_id:string}[]>('/api/analyses?incident_id='+encodeURIComponent(id)).then(async runs=>{
+      if(runs.length&&alive){const result=await request<AnalysisResponse>('/api/analyses/'+runs[0].run_id);if(alive&&historyToken===activeRun.current){setAnalysis(result);setDraft(result.rca_draft);}}
+    }).catch(()=>{});
     return () => {
       alive = false;
     };
@@ -148,7 +156,7 @@ export function IncidentPage() {
           )}
         </div>
         <div className="flex flex-col items-start gap-2 sm:items-end">
-          <Button
+          {can('analyze')&&<Button
             size="lg"
             onClick={run}
             loading={analyzing}
@@ -157,7 +165,7 @@ export function IncidentPage() {
             icon={!analyzing ? <Play size={18} aria-hidden="true" /> : undefined}
           >
             {analyzing ? "Analyzing…" : analysis ? "Re-run RCA Analysis" : "Run RCA Analysis"}
-          </Button>
+          </Button>}
           {analyzing && (
             <p className="text-sm text-slate-600" aria-live="polite">
               {loadingLabel}
@@ -242,6 +250,7 @@ export function IncidentPage() {
           )}
 
           <CategoryEvidenceGrid items={analysis.category_evidence} />
+          <InvestigationPanels analysis={analysis}/>
           <SimilarCases cases={analysis.similar_cases} />
           <RcaDraft
             value={draft}

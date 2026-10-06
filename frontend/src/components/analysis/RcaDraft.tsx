@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Check, Copy, RotateCcw, Save, ShieldAlert } from "lucide-react";
 import { Card, SectionTitle } from "../ui/Card";
 import { Button } from "../ui/Button";
+import {useAuth} from '../../auth';
 
 export function RcaDraft({
   value,
@@ -17,6 +18,7 @@ export function RcaDraft({
   onSave: () => void;
 }) {
   const [copied, setCopied] = useState<"idle" | "ok" | "fail">("idle");
+  const {can}=useAuth();
   const edited = value !== original;
 
   const copy = async () => {
@@ -71,9 +73,9 @@ export function RcaDraft({
         </p>
         <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
           <p className="text-xs text-slate-500">Confirm only after engineering validation.</p>
-          <Button onClick={onSave} arrow icon={<Save size={17} aria-hidden="true" />} disabled={!value.trim()}>
-            Save as Validated Case
-          </Button>
+          {can('propose')&&<Button onClick={onSave} arrow icon={<Save size={17} aria-hidden="true" />} disabled={!value.trim()}>
+            Propose case for review
+          </Button>}
         </div>
       </Card>
     </section>

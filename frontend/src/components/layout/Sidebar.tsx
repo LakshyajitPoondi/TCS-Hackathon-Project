@@ -1,19 +1,25 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { CheckCircle2, GitBranch, Upload, X } from "lucide-react";
+import { CheckCircle2, GitBranch, Upload, X,Factory,FileText,Users,BookOpen } from "lucide-react";
+import {useAuth} from '../../auth';
 
 const NAV = [
   // "Analysis" covers the incident list and every incident page.
   { to: "/", label: "Analysis", icon: GitBranch, match: (p: string) => p === "/" || p.startsWith("/incidents") },
   { to: "/upload", label: "Upload data", icon: Upload, match: (p: string) => p.startsWith("/upload") },
+  { to:'/machines',label:'Machines',icon:Factory,match:(p:string)=>p.startsWith('/machines')},
+  { to:'/documents',label:'Documents',icon:FileText,match:(p:string)=>p.startsWith('/documents')},
+  { to:'/cases',label:'Cases',icon:BookOpen,match:(p:string)=>p.startsWith('/cases')},
+  { to:'/users',label:'Users',icon:Users,match:(p:string)=>p.startsWith('/users')},
   { to: "/evaluations", label: "Evaluations", icon: CheckCircle2, match: (p: string) => p.startsWith("/evaluations") },
 ];
 
 function NavItems({ onNavigate }: { onNavigate?: () => void }) {
   const { pathname } = useLocation();
+  const {can}=useAuth();
   return (
     <nav aria-label="Main" className="flex flex-col gap-1 p-3">
-      {NAV.map(({ to, label, icon: Icon, match }) => {
+      {NAV.filter(n=>(n.to!='/upload'||can('upload'))&&(n.to!='/users'||can('users'))).map(({ to, label, icon: Icon, match }) => {
         const active = match(pathname);
         return (
           <Link

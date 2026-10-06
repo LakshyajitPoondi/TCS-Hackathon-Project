@@ -79,6 +79,8 @@ html {
   color-scheme: light;
   background: var(--color-white);
 }
+.field { display:block; width:100%; padding:12px; border-radius:var(--radius-md); border:1px solid var(--color-slate-200); background:var(--color-slate-100); color:var(--color-ink-900); }
+.field:focus { outline:2px solid var(--color-indigo-500); background:var(--color-white); }
 body {
   font-family: var(--font-sans);
   color: var(--color-slate-600);
