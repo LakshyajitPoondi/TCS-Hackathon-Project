@@ -53,3 +53,7 @@ PHYSICAL_RANGES = {"temperature": (-50, 500), "speed": (0, 10000), "vibration": 
 UPLOAD_MAX_MB = float(os.getenv("UPLOAD_MAX_MB", "10"))
 DOC_UPLOAD_MAX_MB = float(os.getenv("DOC_UPLOAD_MAX_MB", "20"))
 CORS_ORIGINS = [x.strip() for x in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")]
+APP_ENV = os.getenv("APP_ENV", "development")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/app.db")
+JWT_SECRET = os.getenv("JWT_SECRET", "")
+JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))

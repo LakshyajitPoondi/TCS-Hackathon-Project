@@ -72,7 +72,10 @@ def _read(path) -> list[dict]:
 
 
 def all_cases() -> list[dict]:
-    return _read(MEMORY_SEED_PATH) + _read(MEMORY_CASES_PATH)
+    from backend.db import Session, Case
+    from sqlalchemy import select
+    with Session() as session:
+        return [{**c.data, "case_id":c.case_id, "source_incident_id":c.source_incident_id} for c in session.scalars(select(Case).where(Case.status == "approved"))]
 
 
 def recall(signature: list[str], exclude_incident_id: str | None = None, top_k: int = TOP_K) -> list[SimilarCase]:
@@ -106,8 +109,9 @@ def _next_case_id(cases: list[dict]) -> str:
 def retain(case: dict) -> str:
     """Append a saved case to memory_cases.json. `case` must hold `signals`, `confirmed_category`,
     `confirmed_subcause`, `source_incident_id`; a case_id and saved_at are assigned here."""
-    saved = _read(MEMORY_CASES_PATH)
-    case_id = _next_case_id(all_cases())
-    record = {"case_id": case_id, **case, "saved_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
-    MEMORY_CASES_PATH.write_text(json.dumps(saved + [record], indent=2, ensure_ascii=False), encoding="utf-8")
+    from backend.db import Session, Case
+    import uuid
+    case_id = "CASE-" + uuid.uuid4().hex
+    with Session.begin() as session:
+        session.add(Case(case_id=case_id, source_incident_id=case.get("source_incident_id"), status="approved", data=case))
     return case_id
