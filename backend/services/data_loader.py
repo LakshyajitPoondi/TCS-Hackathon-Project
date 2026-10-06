@@ -154,7 +154,19 @@ def save_upload(content: bytes, original_filename: str = "incident.csv") -> dict
         raise IncidentValidationError("Only .csv files are supported")
     if len(content) > config.UPLOAD_MAX_MB * 1024 * 1024:
         raise IncidentValidationError("CSV exceeds UPLOAD_MAX_MB")
-    validate_dataframe(_read_csv(io.BytesIO(content)))
+    frame=validate_dataframe(_read_csv(io.BytesIO(content)))
+    from backend import db
+    with db.Session() as session:
+        for short,group in frame.groupby('machine'):
+            uid=str(group.line.iloc[0])+'/'+short
+            machine=session.get(db.Machine,uid)
+            if not machine:raise IncidentValidationError('Unknown physical machine: '+uid)
+            # Baseline ranges are descriptive. Large multipliers reject unit mistakes
+            # without rejecting genuine anomalies; global physical bounds still apply.
+            for signal,multiplier in [('speed',5),('vibration',20),('motor_current',10)]:
+                normal=machine.data.get('normal_ranges',{}).get(signal)
+                if normal and normal['max']>0 and (group[signal]>normal['max']*multiplier).any():
+                    raise IncidentValidationError(f'{uid}: {signal} exceeds generous baseline plausibility bound')
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     short = uuid.uuid4().hex
     filename = f"upload_{short}.csv"

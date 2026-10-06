@@ -1,14 +1,6 @@
-"""Experience Memory (local JSON). Similar cases are supporting context only; they never change scores or ranks.
+"""Approved SQLite experience memory, used only as explanatory context."""
 
-Signatures use the vocabulary of data/memory_seed.json ("signals" lists). The seed file is read-only;
-saved cases are appended to data/memory_cases.json. Hindsight adapter deferred (MEMORY_BACKEND=local only).
-"""
 
-import json
-import re
-from datetime import datetime, timezone
-
-from backend.core.config import MEMORY_CASES_PATH, MEMORY_SEED_PATH
 from backend.models.schemas import SimilarCase
 
 MIN_SHARED = 2
@@ -61,16 +53,6 @@ def build_signature(evidence: dict) -> list[str]:
     return sorted(t for t, on in tags.items() if on)
 
 
-def _read(path) -> list[dict]:
-    if not path.exists():
-        return []
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return []
-    return data if isinstance(data, list) else list(data.values())
-
-
 def all_cases() -> list[dict]:
     from backend.db import Session, Case
     from sqlalchemy import select
@@ -104,20 +86,3 @@ def recall(signature: list[str], exclude_incident_id: str | None = None, top_k: 
         for _, _, c, shared, reasons in scored[:top_k]
     ]
 
-
-def _next_case_id(cases: list[dict]) -> str:
-    """Continue the seed convention: INC-H12 -> INC-H13 (keeps zero-padding width)."""
-    nums = [(int(m.group(1)), len(m.group(1))) for c in cases if (m := re.match(r"^INC-H(\d+)$", c.get("case_id", "")))]
-    n, width = (max(nums)[0], max(w for _, w in nums)) if nums else (0, 2)
-    return f"INC-H{n + 1:0{width}d}"
-
-
-def retain(case: dict) -> str:
-    """Append a saved case to memory_cases.json. `case` must hold `signals`, `confirmed_category`,
-    `confirmed_subcause`, `source_incident_id`; a case_id and saved_at are assigned here."""
-    from backend.db import Session, Case
-    import uuid
-    case_id = "CASE-" + uuid.uuid4().hex
-    with Session.begin() as session:
-        session.add(Case(case_id=case_id, source_incident_id=case.get("source_incident_id"), status="approved", data=case))
-    return case_id

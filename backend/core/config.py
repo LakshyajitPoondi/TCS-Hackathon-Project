@@ -36,16 +36,10 @@ load_dotenv(ROOT_DIR / ".env")
 
 SOPS_DIR = DATA_DIR / "sops"
 MEMORY_SEED_PATH = DATA_DIR / "memory_seed.json"   # read-only
-MEMORY_CASES_PATH = DATA_DIR / "memory_cases.json"  # saved cases (POST /api/cases)
 LLM_CACHE_DIR = DATA_DIR / "llm_cache"
 
-MEMORY_BACKEND = os.getenv("MEMORY_BACKEND", "local")  # only "local" exists; Hindsight adapter deferred
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")  # supports JSON mode
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 LLM_ENABLED = os.getenv("LLM_ENABLED", "true").strip().lower() in ("1", "true", "yes")
-LLM_TIMEOUT_S = 15
-LLM_TEMPERATURE = 0.2
 
 # Broad safety bounds, not anomaly thresholds. Seeded machine normal ranges are narrower.
 PHYSICAL_RANGES = {"temperature": (-50, 500), "speed": (0, 10000), "vibration": (0, 100),
@@ -60,7 +54,8 @@ JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq")
 LLM_MODEL = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
 LLM_API_KEY = os.getenv("LLM_API_KEY", GROQ_API_KEY if LLM_PROVIDER == "groq" else "")
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.groq.com/openai/v1" if LLM_PROVIDER == "groq" else "")
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"  # default for LLM_PROVIDER=gemini
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", {"groq": "https://api.groq.com/openai/v1", "gemini": GEMINI_BASE_URL}.get(LLM_PROVIDER, ""))
 LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "15"))
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "1"))
 AGENT_ENABLED = os.getenv("AGENT_ENABLED", "true").lower() == "true"

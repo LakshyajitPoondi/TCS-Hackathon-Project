@@ -173,9 +173,18 @@ def run_worker():
     suites.append(suite('Experience memory',[metric('leave_one_out_category_agreement',ratio([r['category_agreement'] for r in memory]),.7),metric('current_incident_exclusion',ratio([r['current_excluded'] for r in memory]),1),metric('approval_role_enforced',ratio([r['passed'] for r in workflow]),1),{'metric':'physical_machine_agreement','value':sum(r['machine_agreement'] for r in memory)/len(memory),'threshold':0,'passed':True,'status':'Context metric; cross-machine recall is permitted'}],memory))
     suites.append(suite('RBAC',[metric('endpoint_role_matrix',ratio([r['passed'] for r in matrix]),1)],matrix))
     suites.append(judge(results))
+    if config.EMBEDDINGS_PROVIDER!='none':
+        from evals.embedding_check import run as real_embedding_check
+        benchmark=real_embedding_check(config.EMBEDDINGS_PROVIDER)
+        retrieval_suite=next(s for s in suites if s['suite']=='Retrieval')
+        if benchmark['status']=='Verified':
+            retrieval_suite['metrics'][-1]=metric('live_embedding_recall_at_k',benchmark['recall_at_4'],.8)
+            retrieval_suite['metrics'].append(metric('live_embedding_wrong_machine_leaks',benchmark['wrong_machine_leaks'],0,True))
+        else:retrieval_suite['metrics'][-1]['status']='Unverified: '+benchmark.get('reason','provider failure')
+        retrieval_suite['details'].append({'real_embedding_benchmark':benchmark})
     return {'suites':suites,'config':{'fixtures':len(fixtures),'incidents':len(results),'llm_checks':'fake/no-key/mocked HTTP','embeddings':'none + mocked fusion','rag_top_k':config.RAG_TOP_K,'prompt_version':llm.PROMPT_VERSION,'agent_max_steps':config.AGENT_MAX_STEPS}}
 
-def compute(**kwargs):return subprocess_result('evals.run_evals')
+def compute(**kwargs):return subprocess_result('evals.run_evals',EMBEDDINGS_PROVIDER=config.EMBEDDINGS_PROVIDER)
 def persist(result,user_id=None):
     run_id=uuid.uuid4().hex
     with db.Session.begin() as session:

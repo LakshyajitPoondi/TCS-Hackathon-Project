@@ -105,6 +105,8 @@ def get_doc(doc_id:str,user=Depends(require('view'))):
         return {**documents.serialize(d),'chunks':[{'chunk_id':c.chunk_id,'page_or_section':c.page_or_section,'text':c.text,'version':c.version} for c in s.scalars(select(db.DocumentChunk).where(db.DocumentChunk.doc_id==doc_id))]}
 
 class Mapping(BaseModel):
+    title:str|None=Field(default=None,min_length=1,max_length=300)
+    doc_type:str|None=None
     scope:str
     targets:list[str]=Field(default_factory=list)
     status:str|None=None
@@ -127,4 +129,10 @@ def edit_doc(doc_id:str,body:Mapping,user=Depends(require('documents'))):
         if not d:raise HTTPException(404,'Document not found')
         ms=list(s.scalars(select(db.Machine)));documents.validate_mapping(body.scope,body.targets,ms)
         d.scope=body.scope;d.targets=body.targets;d.status=body.status or 'pending_mapping'
+        if body.title is not None:
+            if not body.title.strip():raise HTTPException(422,'Title must not be blank')
+            d.title=body.title.strip()
+        if body.doc_type is not None:
+            if body.doc_type not in documents.DOC_TYPES:raise HTTPException(422,'Invalid doc_type')
+            d.doc_type=body.doc_type
         documents.put_links(s,d,ms);db.audit(s,user.id,'edit_document',{'doc_id':doc_id});return documents.serialize(d)

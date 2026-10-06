@@ -40,7 +40,33 @@ class LLMOutput(Strict):
 def available():
     return config.LLM_ENABLED and (config.LLM_PROVIDER == 'fake' or bool(config.LLM_API_KEY))
 
-def request_json(system, payload, schema, *, model=None, fake_output=None):
+# OpenAI-compatible chat endpoints. "gemini" is an alias of openai_compatible with Google's base URL as default.
+OPENAI_COMPATIBLE = ('groq', 'openai_compatible', 'gemini')
+DEFAULT_BASE_URLS = {'groq': 'https://api.groq.com/openai/v1', 'gemini': config.GEMINI_BASE_URL}
+RATE_LIMIT_RETRIES = 3      # extra attempts after an HTTP 429, separate from LLM_MAX_RETRIES
+RATE_LIMIT_MAX_DELAY = 20.0  # seconds; caps Retry-After and exponential backoff
+_sleep = time.sleep          # patched in tests
+
+def chat_completions_url(base):
+    """'.../v1' and '.../v1beta/openai/' both become '<base>/chat/completions'."""
+    if not base: raise ValueError('LLM_BASE_URL required')
+    return base.rstrip('/')+'/chat/completions'
+
+def _is_gemini(base): return 'generativelanguage.googleapis.com' in base
+
+def _post(url, **kwargs):
+    """httpx.post with exponential backoff on HTTP 429; other statuses are returned unchanged."""
+    for attempt in range(RATE_LIMIT_RETRIES+1):
+        response=httpx.post(url,**kwargs)
+        if getattr(response,'status_code',None)!=429 or attempt==RATE_LIMIT_RETRIES:
+            return response
+        retry_after=(getattr(response,'headers',None) or {}).get('retry-after','')
+        delay=float(retry_after) if retry_after.replace('.','',1).isdigit() else 2.0**attempt
+        delay=min(delay,RATE_LIMIT_MAX_DELAY)
+        log.warning('rate limited (429); retry %s/%s in %.1fs',attempt+1,RATE_LIMIT_RETRIES,delay)
+        _sleep(delay)
+
+def request_json(system, payload, schema, *, model=None, fake_output=None, validate=None):
     """Shared provider call. Returns validated data or None; records every attempt."""
     provider, model = config.LLM_PROVIDER, model or config.LLM_MODEL
     if not available():
@@ -52,10 +78,9 @@ def request_json(system, payload, schema, *, model=None, fake_output=None):
         try:
             if provider == 'fake':
                 content=json.dumps(fake_output)
-            elif provider in ('groq','openai_compatible'):
-                base=config.LLM_BASE_URL or ('https://api.groq.com/openai/v1' if provider=='groq' else '')
-                if not base: raise ValueError('LLM_BASE_URL required')
-                response=httpx.post(base.rstrip('/')+'/chat/completions',headers={'Authorization':'Bearer '+config.LLM_API_KEY},
+            elif provider in OPENAI_COMPATIBLE:
+                base=config.LLM_BASE_URL or DEFAULT_BASE_URLS.get(provider,'')
+                response=_post(chat_completions_url(base),headers={'Authorization':'Bearer '+config.LLM_API_KEY},
                     json={'model':model,'temperature':0,'response_format':{'type':'json_object'},
                           'messages':[{'role':'system','content':system},{'role':'user','content':json.dumps(payload)}]},
                     timeout=config.LLM_TIMEOUT_SECONDS)
@@ -63,13 +88,14 @@ def request_json(system, payload, schema, *, model=None, fake_output=None):
                 content=body['choices'][0]['message']['content']
             elif provider == 'anthropic':
                 base=config.LLM_BASE_URL or 'https://api.anthropic.com/v1'
-                response=httpx.post(base.rstrip('/')+'/messages',headers={'x-api-key':config.LLM_API_KEY,'anthropic-version':'2023-06-01'},
+                response=_post(base.rstrip('/')+'/messages',headers={'x-api-key':config.LLM_API_KEY,'anthropic-version':'2023-06-01'},
                     json={'model':model,'max_tokens':3000,'temperature':0,'system':system,
                           'messages':[{'role':'user','content':json.dumps(payload)}]},timeout=config.LLM_TIMEOUT_SECONDS)
                 response.raise_for_status(); body=response.json(); tokens=body.get('usage')
                 content=''.join(b['text'] for b in body['content'] if b.get('type')=='text')
             else: raise ValueError('unsupported provider')
             result=schema.model_validate_json(content).model_dump()
+            if validate:result=validate(result)
             record(dict(provider=provider,model=model,latency_ms=round((time.perf_counter()-started)*1000,2),tokens=tokens,success=True,fallback_reason=None,attempt=attempt))
             return result
         except Exception as exc:
@@ -108,7 +134,8 @@ def generate(incident_id,payload):
     fake={'hypotheses':[{'rank':h['rank'],'narrative':h.get('template_narrative','Evidence supports this hypothesis; verification is required.'),
                         'verification_steps':h.get('template_steps',[])} for h in payload['hypotheses']],
           'rca_draft':payload.get('template_draft','Engineering validation is required.')}
-    result=request_json(SYSTEM_PROMPT,payload,LLMOutput,fake_output=fake)
+    result=request_json(SYSTEM_PROMPT,payload,LLMOutput,fake_output=fake,
+                        validate=lambda out:_parse(json.dumps(out),{h['rank'] for h in payload['hypotheses']}))
     if result:
         try: result=_parse(json.dumps(result),{h['rank'] for h in payload['hypotheses']})
         except ValueError:

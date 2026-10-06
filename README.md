@@ -24,6 +24,22 @@ npm run dev
 
 Use http://localhost:5173 (127.0.0.1:5173 is also allowed). Set VITE_API_BASE_URL if the backend port changes.
 
+### Using Google Gemini
+
+Gemini is called through its OpenAI-compatible endpoint. Get a key at https://aistudio.google.com/apikey and put it in `.env` (never commit it):
+
+```dotenv
+LLM_ENABLED=true
+LLM_PROVIDER=gemini            # alias: openai_compatible + Google's base URL
+LLM_MODEL=gemini-3.8-flash
+LLM_API_KEY=your-gemini-key
+# Equivalent explicit form:
+# LLM_PROVIDER=openai_compatible
+# LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+```
+
+Requests go to `<LLM_BASE_URL>/chat/completions` (a trailing slash is fine) with `Authorization: Bearer <key>` and JSON output. HTTP 429 rate limits are retried up to 3 times with backoff (Retry-After honoured, max 20 s), then the app falls back to template wording. Check it with `python -m evals.live_llm_check`.
+
 ```powershell
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m evals.run_evals
