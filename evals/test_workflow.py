@@ -105,4 +105,4 @@ def test_dashboard_and_nav_counts(client, tokens):
     assert any(p['kind'] == 'case_review' for p in qa['pending'])
     viewer = as_role(client, tokens, 'viewer').get('/api/dashboard').json()
     assert viewer['pending'] == [] and len(viewer['recent_incidents']) == 8
-    assert client.get('/api/nav/counts').json() == {'documents_pending': 0, 'cases_pending': 1}
+    assert client.get('/api/nav/counts').json() == {'users_pending': 0, 'documents_pending': 0, 'cases_pending': 1}

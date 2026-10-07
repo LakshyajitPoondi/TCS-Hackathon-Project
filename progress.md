@@ -2,7 +2,7 @@
 
 ## v2 build (branch feature/v2, from main c58eed5)
 Prompt: v2 stages 0–9 (see audit_report_v2.md for bug IDs B1–B20). Each stage ends with checks, this file, and a commit "v2 stage N: …".
-**Next unfinished stage: 6.**
+**Next unfinished stage: 7.**
 
 ### Live LLM call counter (budget 10 for the whole build)
 Used: 2 of 10.
@@ -36,9 +36,19 @@ Used: 2 of 10.
 - D5.1 config/cause_categories.yaml holds categories + display names, the 7 candidates (category, subcause, label, display name, verification sentence, missing checks), the 7 rule weight bands and the score thresholds. Rule conditions stay in code; the loader (engine/cause_config.py, pydantic, extra keys forbidden) rejects missing/duplicate categories or candidates, wrong signs, unordered thresholds and subcauses outside machine. CAUSE_CONFIG_PATH can point elsewhere.
 - D5.2 Hypothesis evidence now carries its rule `weight` (additive Evidence field; category_evidence unchanged). The sum of weights equals the hypothesis score (tested). Full scoring output for all 18 incidents was byte-identical before/after the move.
 - D5.3 Graph built server-side from the stored analysis (GET /api/analyses/{run_id}/graph), rendered with @xyflow/react 12 in a lazy chunk. Clicking a node highlights its full upstream and downstream chain and shows its evidence, links and cited chunk. Abstain mode: evidence → categories (below minimum) → "Insufficient evidence" verdict → missing checks from the config and suggested references.
+- D6.1 Demo mode seeds an extra demo-admin@demo.local (admin, DEMO_PASSWORD) for the admin demo button, so the real SEED_ADMIN password is never exposed. GET /api/public/config returns demo passwords only when DEMO_USERS_ENABLED=true and APP_ENV=development; nothing is baked into the bundle.
+- D6.2 Sign-up: POST /api/auth/signup creates an inactive viewer (name, email, password 10–72 bytes). Login with the right password on an inactive account returns 403 "Account pending activation"; a wrong password stays 401. Admins see pending sign-ups on the dashboard, a users_pending nav count and an "Inactive" label on the Users page.
+- D6.3 Robot animation: framer-motion springs (eyes 300/25, head 120/18, body 60/14, arms 170/20) driven from one framer frame loop (useAnimationFrame) that reads the pointer ref; float/pulse/dots are CSS keyframes; only transform/opacity animate (plus the static eye-glow filter). Expressions (line, dots, happy, sad, giggle) cross-fade by opacity. The privacy pose lifts the arms 44 px so the hands cover the eyes. Reduced motion: no float/hop/shake/head movement, eyes ±4 px, no springs.
+- D6.4 Layout stability: the demo-profile area has a reserved height and a fixed 2 × 2 grid, so neither the config request nor the web-font swap moves the card (measured CLS ≈ 0.001).
 - D1.7 Code defaults changed to DATABASE_URL=postgresql+psycopg://rca:rca@localhost:5433/rca and EMBEDDINGS_PROVIDER=fastembed. The owner's .env still says sqlite + none, so the owner must change those two lines to use Postgres/pgvector.
 
 ### v2 stage log
+#### Stage 6 complete
+- Login page per §7.1: glass left panel (logo, "Engine online" badge, 3-line headline, robot, 3 glass capability chips, footer "RCA engine v0.1.0" / "Data source connected"), right panel with Sign in / Sign up segmented toggle, email + password with icons, eye-icon toggle, 4 demo profile buttons (admin, plant engineer, QA lead, viewer) that fill email and password, errors under the inputs with input shake.
+- RcaRobot per §8 in features/auth/robot/ (RcaRobot, RobotSvg, useCursorTarget, useRobotState, poses, RobotContext, robot.css + RobotFallback): layered SVG, cursor tracking with lagged springs, blink (incl. double), idle look-around after 4 s, float + shadow, chest pulse, state machine (watchingEmail with caret tracking and nods, privacy, peeking, thinking dots + sway, success hop/wave/happy eyes/mint flash then navigate after 900 ms, error head-shake + red sad eyes 1.5 s), demo-profile wave, toggle glance + hop, easter eggs (head giggle, chest glow, 1.5 s debounce), touch + already-permitted device orientation, reduced motion, lazy chunk (RcaRobot 146 kB) with a same-size static fallback.
+- Verified headless (evals/browser/robot_check.mjs): **31/31 checks, 3 consecutive runs** — separate chunk, CLS ≈ 0.001 and no robot shift, lag hierarchy eyes 0.88 > head 0.73 > body 0.63 of range after 120 ms, ~60+ fps loop, blink, idle look-around, caret tracking, no long tasks while typing, privacy/peeking/thinking/error/success states, head + input shake, giggle, demo fill + wave, status badges, reduced motion, touch at 375 px, layout at 375/768/1280/1536 with no horizontal scroll, no console errors.
+- Tests: SQLite 82 passed + 1 skipped; Postgres 83 passed (new test_signup_public.py). Workflow walk 9/9 through the new login page.
+
 #### Stage 5 complete
 - Categories/subcauses/display names/rule weights/thresholds/texts moved to config/cause_categories.yaml, validated at start-up; GET /api/config/causes. Ranking regression identical (16/16, 16/16, 2/2; full snapshot byte-identical).
 - Cause-and-effect graph on the incident page (React Flow): signals/events → hypotheses → verification actions (+ missing checks) → cited documents; edge labels = rule weights (+3/+2/+1, −2/−3 dashed red for contradicting); click highlights connections and opens the evidence; works for the abstain case.

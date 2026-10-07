@@ -70,7 +70,7 @@ def run():
                 expected=200 if role in PERMISSIONS[permission] else 403
                 actual=200 if 200<=r.status_code<300 else r.status_code
                 details.append({'method':method,'endpoint':path,'role':role,'expected':expected,'actual':r.status_code,'passed':actual==expected})
-        for path in ('/health','/docs','/openapi.json'):
+        for path in ('/health','/docs','/openapi.json','/api/public/config'):
             r=client.get(path);details.append({'endpoint':path,'role':'anonymous','expected':200,'actual':r.status_code,'passed':r.status_code==200})
         r=client.post('/api/auth/login',json={'email':users['engineer'].email,'password':password});details.append({'endpoint':'/api/auth/login','actual':r.status_code,'passed':r.status_code==200})
         expired=jwt.encode({'sub':users['viewer'].id,'ver':0,'jti':'expiry-probe','iat':datetime.now(timezone.utc)-timedelta(days=1),'exp':datetime.now(timezone.utc)-timedelta(minutes=1)},config.JWT_SECRET,algorithm='HS256')

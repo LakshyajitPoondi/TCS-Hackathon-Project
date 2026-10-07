@@ -267,6 +267,10 @@ def dashboard(session, user):
                      'detail': '; '.join((d.detection or {}).get('warnings', [])) or 'Mapping needs confirmation',
                      'link': f'/documents/{d.doc_id}', 'created_at': d.uploaded_at} for d in pending_docs
                     if d.scope != 'plant' or user.role == 'admin']
+    if user.role in PERMISSIONS['users']:
+        pending += [{'kind': 'user_activation', 'title': f'Activate account: {u.name or u.email}', 'detail': f'{u.email} · signed up as viewer',
+                     'link': '/users', 'created_at': u.created_at}
+                    for u in session.scalars(select(db.User).where(db.User.active.is_(False), db.User.token_version == 0))]
     if user.role in PERMISSIONS['analyze']:
         pending += [{'kind': 'analyse', 'title': f"Analyse {r['id']}", 'detail': f"{r['source_label']} · {r['line']}",
                      'link': f"/incidents/{r['id']}", 'created_at': r['created_at']} for r in rows
@@ -285,6 +289,6 @@ def dashboard(session, user):
 
 
 def nav_counts(session):
-    return {'documents_pending': session.scalar(select(func.count()).select_from(db.Document).where(db.Document.status == 'pending_mapping')),
+    return {'users_pending': session.scalar(select(func.count()).select_from(db.User).where(db.User.active.is_(False))),'documents_pending': session.scalar(select(func.count()).select_from(db.Document).where(db.Document.status == 'pending_mapping')),
             'cases_pending': session.scalar(select(func.count()).select_from(db.Case).where(db.Case.status == 'proposed'))}
 

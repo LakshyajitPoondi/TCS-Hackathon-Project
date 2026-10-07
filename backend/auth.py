@@ -16,6 +16,20 @@ PERMISSIONS = {"view":ROLES, "analyze":{"admin","engineer","qa_lead"}, "upload":
     "approve":{"admin","qa_lead"}, "evals":{"admin","qa_lead"}, "users":{"admin"},
     "draft":{"admin","engineer","qa_lead"}, "plant_documents":{"admin"}}
 _development_secret = secrets.token_urlsafe(48)
+DEMO_PROFILES=[('demo-admin','admin'),('engineer','engineer'),('qa','qa_lead'),('viewer','viewer')]
+DEMO_LABELS={'admin':'Administrator','engineer':'Plant engineer','qa_lead':'QA lead','viewer':'Viewer'}
+
+def demo_enabled():
+    return os.getenv("DEMO_USERS_ENABLED","false").lower()=="true" and bool(os.getenv("DEMO_PASSWORD",""))
+
+def demo_profiles():
+    """Public demo profiles for the login page. The password is included only in demo mode and never outside
+    APP_ENV=development, so a production bundle or API never carries it."""
+    if not demo_enabled():
+        return []
+    expose=config.APP_ENV=="development"
+    return [{"label":DEMO_LABELS[role],"role":role,"email":f"{name}@demo.local",**({"password":os.getenv("DEMO_PASSWORD","")} if expose else {})}
+            for name,role in DEMO_PROFILES]
 bearer = HTTPBearer(auto_error=False)
 
 def secret():
@@ -71,7 +85,8 @@ def seed_users():
     if os.getenv("DEMO_USERS_ENABLED","false").lower()=="true":
         demo=os.getenv("DEMO_PASSWORD","")
         if not demo: raise ValueError("DEMO_PASSWORD required when demo users enabled")
-        profiles += [(f"{name}@demo.local",demo,role) for name,role in [('engineer','engineer'),('qa','qa_lead'),('viewer','viewer')]]
+        # A separate demo admin backs the login page's admin demo button; the real seed admin password is never exposed.
+        profiles += [(f"{name}@demo.local",demo,role) for name,role in DEMO_PROFILES]
     names={'admin':'Administrator','engineer':'Plant Engineer','qa_lead':'QA Lead','viewer':'Viewer'}
     from sqlalchemy import select
     with db.Session.begin() as session:

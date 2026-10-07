@@ -1,0 +1,35 @@
+/* RcaRobot keyframes (§8.4). Only transform and opacity animate. Light theme only. */
+.rca-robot {
+  --robot-shade: #eef0fa;   /* head/body gradient end (§8.2) */
+  --robot-rim: #dde1f0;     /* 1px rim */
+  --robot-blue: #3c7bf0;    /* middle stop of the brand gradient (--g-brand) */
+  --robot-shadow: rgb(31 42 179 / 0.15);
+}
+.rca-robot .rr-rim { stroke: var(--robot-rim); }
+.rca-robot .rr-wheel { stroke: var(--color-mint-400); }
+.rca-robot .rr-shadow { fill: var(--robot-shadow); }
+
+.rca-robot .rr-float { animation: rr-float 3.2s ease-in-out infinite; }
+@keyframes rr-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.rca-robot .rr-pulse { animation: rr-pulse 2.4s ease-in-out infinite; }
+@keyframes rr-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.rca-robot .rr-dot { animation: rr-dot 0.9s ease-in-out infinite; }
+.rca-robot .rr-dot-2 { animation-delay: 0.15s; }
+.rca-robot .rr-dot-3 { animation-delay: 0.3s; }
+@keyframes rr-dot {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rca-robot .rr-float, .rca-robot .rr-pulse { animation: none; }
+}
+.rca-robot[data-reduced="true"] .rr-float, .rca-robot[data-reduced="true"] .rr-pulse { animation: none; }
