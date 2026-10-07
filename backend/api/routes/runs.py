@@ -20,3 +20,11 @@ def result(run_id:str):
         r=s.get(db.AnalysisRun,run_id)
         if not r:raise HTTPException(404,'Analysis not found')
         return r.response
+@router.get('/{run_id}/graph')
+def graph(run_id:str):
+    """Cause-and-effect graph built from the stored analysis (signals/events -> hypotheses -> actions -> documents)."""
+    from backend.services.cause_graph import build
+    with db.Session() as s:
+        r=s.get(db.AnalysisRun,run_id)
+        if not r:raise HTTPException(404,'Analysis not found')
+        return build({**r.response,'run_id':run_id})

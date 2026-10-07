@@ -17,3 +17,12 @@ def dashboard(user=Depends(require('view'))):
 def nav_counts(user=Depends(require('view'))):
     with db.Session() as session:
         return workflow.nav_counts(session)
+
+
+@router.get('/config/causes')
+def causes(user=Depends(require('view'))):
+    """Display names, candidates, weights and thresholds from config/cause_categories.yaml."""
+    from engine.cause_config import CONFIG
+    return {'categories': CONFIG.category_names(),
+            'candidates': [c.model_dump(include={'key', 'category', 'subcause', 'display_name'}) for c in CONFIG.candidates],
+            'weights': CONFIG.weights.model_dump(), 'thresholds': CONFIG.thresholds.model_dump()}

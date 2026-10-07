@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ArrowLeft, FileQuestion, Play } from "lucide-react";
 import { analyzeIncident, getIncident, getSignals } from "../api/endpoints";
@@ -24,6 +24,7 @@ import { SaveCaseModal } from "../components/analysis/SaveCaseModal";
 import {useAuth} from '../auth';
 import {request} from '../api/client';
 import {InvestigationPanels} from '../components/analysis/InvestigationPanels';
+const CauseGraph = lazy(() => import('../components/analysis/CauseGraph'));
 import { Link } from 'react-router-dom';
 import type { Draft, IncidentWorkflow } from '../types/workflow';
 import { CaseStatusBadge, SourceBadge, StatusBadge } from '../components/ui/StatusBadge';
@@ -282,6 +283,15 @@ export function IncidentPage() {
               </div>
             </section>
           )}
+
+          <section>
+            <SectionTitle title="Cause-and-effect graph" sub="Built from this analysis: evidence → hypotheses → verification actions → cited documents." />
+            {analysis.run_id && (
+              <Suspense fallback={<Card className="flex h-[560px] items-center justify-center"><Spinner label="Loading graph…" /></Card>}>
+                <CauseGraph key={analysis.run_id} runId={analysis.run_id} />
+              </Suspense>
+            )}
+          </section>
 
           <CategoryEvidenceGrid items={analysis.category_evidence} />
           <InvestigationPanels analysis={analysis}/>

@@ -1,0 +1,107 @@
+# Cause categories, subcauses, display names and rule weights for the deterministic RCA engine.
+# Loaded and validated at start-up by engine/cause_config.py; the app refuses to start if this file is invalid.
+#
+# What you can change here without code: display names, labels, verification sentences, missing checks,
+# the weight of each rule band and the score thresholds. Changing weights or thresholds changes ranking:
+# re-run `python -m evals.sanity_check` (expected 16/16 top-1, 16/16 top-3, 2/2 abstentions).
+# The categories and candidate keys must stay as listed: each candidate has a rule table in engine/scoring.py
+# and the API schema accepts exactly these six categories (and subcauses only for machine).
+#
+# Rule bands: every rule in engine/scoring.py uses one band.
+#   strong / moderate / weak    supporting signal evidence
+#   note                        operator-note keyword (one rule per category)
+#   health                      machine-health watch/degraded on the target (machine subcauses only)
+#   contra_strong / contra      contradicting evidence (negative)
+version: 1
+weights:
+  strong: 3
+  moderate: 2
+  weak: 1
+  note: 1
+  health: 1
+  contra_strong: -3
+  contra: -2
+thresholds:
+  min_score: 5
+  medium_score: 6
+  high_score: 8
+  max_hypotheses: 3
+categories:
+- key: machine
+  display_name: Machine
+- key: material
+  display_name: Material
+- key: method
+  display_name: Method
+- key: measurement
+  display_name: Measurement
+- key: people
+  display_name: People
+- key: environment
+  display_name: Environment
+candidates:
+- key: cooling
+  category: machine
+  subcause: cooling
+  label: cooling-related machine
+  display_name: Machine · Cooling
+  verify_sentence: Cooling airflow, fan operation and the temperature reading should be verified before corrective
+    action.
+  missing_checks:
+  - Verify physical airflow and fan operation.
+  - Compare the sensor against an independent temperature reading.
+- key: mechanical
+  category: machine
+  subcause: mechanical
+  label: mechanical machine
+  display_name: Machine · Mechanical
+  verify_sentence: Bearing and drive condition should be verified on the machine before corrective action.
+  missing_checks:
+  - Inspect bearings and gearbox for wear or damage.
+  - Take a handheld vibration reading at the drive end.
+- key: material
+  category: material
+  subcause: null
+  label: material (batch)
+  display_name: Material
+  verify_sentence: The suspect lot's certificate and incoming-inspection records should be verified before corrective
+    action.
+  missing_checks:
+  - Check the lot's certificate of analysis against spec.
+  - Confirm whether other lines received the same lot.
+- key: method
+  category: method
+  subcause: null
+  label: method (changeover/setup)
+  display_name: Method
+  verify_sentence: The loaded setpoints should be verified against the approved setup sheet before corrective action.
+  missing_checks:
+  - Compare loaded setpoints against the approved setup sheet.
+  - Confirm the first-off inspection after changeover was done.
+- key: people
+  category: people
+  subcause: null
+  label: people (handover/procedure)
+  display_name: People
+  verify_sentence: Handover records and any skipped calibration step should be verified before corrective action.
+  missing_checks:
+  - Review the shift handover log for skipped steps.
+  - Confirm calibration status of gauges used by the incoming shift.
+- key: measurement
+  category: measurement
+  subcause: null
+  label: measurement (sensor)
+  display_name: Measurement
+  verify_sentence: The reading should be verified against an independent instrument before corrective action.
+  missing_checks:
+  - Compare the panel reading against a handheld or housing probe.
+  - Check sensor wiring, connector and calibration date.
+- key: environment
+  category: environment
+  subcause: null
+  label: environmental
+  display_name: Environment
+  verify_sentence: Ambient conditions and HVAC status should be verified before corrective action.
+  missing_checks:
+  - Record ambient temperature and humidity at the line.
+  - Check HVAC / AC unit status for the incident period.

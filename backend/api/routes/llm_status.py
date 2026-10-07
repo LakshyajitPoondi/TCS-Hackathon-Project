@@ -9,3 +9,4 @@ router = APIRouter(prefix='/api/llm', tags=['llm'])
 def status(user=Depends(require('view'))):
     """Provider, model, agent mode, calls today / daily budget and any quota block. Never returns the key."""
     return llm.status()
+

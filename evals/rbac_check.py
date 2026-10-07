@@ -46,7 +46,7 @@ def run():
     mapping={'scope':'machine','targets':['LINE-A/IMM-01']}
     entries=[('GET','/','view',{}),('GET','/api/auth/me','view',{}),('GET','/api/incidents','view',{}),('GET','/api/incidents/INC-001','view',{}),('GET','/api/incidents/INC-001/signals','view',{}),
       ('GET','/api/machines','view',{}),('GET','/api/machines/LINE-A/IMM-01','view',{}),('GET','/api/machines/LINE-A/IMM-01/documents','view',{}),('GET','/api/machines/LINE-A/IMM-01/incidents','view',{}),
-      ('GET','/api/documents','view',{}),('GET','/api/documents/SOP-007','view',{}),('GET','/api/sops/SOP-007','view',{}),('GET','/api/cases','view',{}),('GET','/api/analyses','view',{}),('GET','/api/analyses/'+run_id,'view',{}),('GET','/api/analyses/'+run_id+'/trace','view',{}),('GET','/api/evals','view',{}),('GET','/api/users','users',{}),
+      ('GET','/api/documents','view',{}),('GET','/api/documents/SOP-007','view',{}),('GET','/api/sops/SOP-007','view',{}),('GET','/api/cases','view',{}),('GET','/api/analyses','view',{}),('GET','/api/analyses/'+run_id,'view',{}),('GET','/api/analyses/'+run_id+'/trace','view',{}),('GET','/api/analyses/'+run_id+'/graph','view',{}),('GET','/api/config/causes','view',{}),('GET','/api/evals','view',{}),('GET','/api/users','users',{}),
       ('POST','/api/incidents/INC-001/analyze','analyze',{}),('POST','/api/incidents/upload','upload',{'files':{'file':('incident.csv',csv)}}),
       ('POST','/api/machines','machines',{'json':{**machine,'machine_uid':'LINE-C/IMM-03','short_name':'IMM-03','line':'LINE-C'}}),('PATCH','/api/machines/LINE-A/IMM-01','machines',{'json':machine}),
       ('POST','/api/documents/upload','documents',{'data':{'title':'Matrix guide','doc_type':'manual','scope':'plant'},'files':{'file':('guide.txt',b'Inspect coolant flow.')}}),

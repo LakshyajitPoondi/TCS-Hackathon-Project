@@ -63,6 +63,7 @@ class Evidence(BaseModel):
     description: str
     value: float | str | None = None
     machine: str | None = None
+    weight: float | None = None  # rule weight (config/cause_categories.yaml) on hypothesis evidence; shown on the graph
 
 
 class VerificationStep(BaseModel):

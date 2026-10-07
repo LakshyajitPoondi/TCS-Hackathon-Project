@@ -2,7 +2,7 @@
 
 ## v2 build (branch feature/v2, from main c58eed5)
 Prompt: v2 stages 0–9 (see audit_report_v2.md for bug IDs B1–B20). Each stage ends with checks, this file, and a commit "v2 stage N: …".
-**Next unfinished stage: 5.**
+**Next unfinished stage: 6.**
 
 ### Live LLM call counter (budget 10 for the whole build)
 Used: 2 of 10.
@@ -33,9 +33,18 @@ Used: 2 of 10.
 - D4.2 Duplicates (B7): blocking 409 with the list unless the engineer gives a reason (stored as duplicate_override). Same-incident check covers proposed + approved cases; similarity check covers approved cases with the same machine + category + subcause and cosine ≥ 0.90 between case texts (summary + evidence + symptoms + fix + lessons); without embeddings, ≥ 80 % shared signal tags.
 - D4.3 Recall: semantic factor = +3 × cosine (only when ≥ 0.5), reason "summary similarity 0.xx". B15: analysis no longer passes the top hypothesis as `confirmed_category` (+4/+2); it is a separate +1 reason "matches current top hypothesis (+1, context only)". Hypothesis ranking is untouched. The memory eval still passes a reference case's own confirmed cause (that is a property of the case, not the engine).
 - D4.4 Lifecycle: edit/retire only for approved cases, by admin or qa_lead, with a reason; the previous data is stored in case_versions; data.version increments; all actions audited; GET /api/cases/{id}/history. Retired cases are listed (status filter) but never recalled; the incident status ignores retired cases.
+- D5.1 config/cause_categories.yaml holds categories + display names, the 7 candidates (category, subcause, label, display name, verification sentence, missing checks), the 7 rule weight bands and the score thresholds. Rule conditions stay in code; the loader (engine/cause_config.py, pydantic, extra keys forbidden) rejects missing/duplicate categories or candidates, wrong signs, unordered thresholds and subcauses outside machine. CAUSE_CONFIG_PATH can point elsewhere.
+- D5.2 Hypothesis evidence now carries its rule `weight` (additive Evidence field; category_evidence unchanged). The sum of weights equals the hypothesis score (tested). Full scoring output for all 18 incidents was byte-identical before/after the move.
+- D5.3 Graph built server-side from the stored analysis (GET /api/analyses/{run_id}/graph), rendered with @xyflow/react 12 in a lazy chunk. Clicking a node highlights its full upstream and downstream chain and shows its evidence, links and cited chunk. Abstain mode: evidence → categories (below minimum) → "Insufficient evidence" verdict → missing checks from the config and suggested references.
 - D1.7 Code defaults changed to DATABASE_URL=postgresql+psycopg://rca:rca@localhost:5433/rca and EMBEDDINGS_PROVIDER=fastembed. The owner's .env still says sqlite + none, so the owner must change those two lines to use Postgres/pgvector.
 
 ### v2 stage log
+#### Stage 5 complete
+- Categories/subcauses/display names/rule weights/thresholds/texts moved to config/cause_categories.yaml, validated at start-up; GET /api/config/causes. Ranking regression identical (16/16, 16/16, 2/2; full snapshot byte-identical).
+- Cause-and-effect graph on the incident page (React Flow): signals/events → hypotheses → verification actions (+ missing checks) → cited documents; edge labels = rule weights (+3/+2/+1, −2/−3 dashed red for contradicting); click highlights connections and opens the evidence; works for the abstain case.
+- Tests: SQLite 79 passed + 1 skipped; Postgres 80 passed (new test_cause_config.py incl. 7 invalid-config cases, test_cause_graph.py ranked + abstain; RBAC matrix + graph/config endpoints).
+- Headless check (evals/browser/graph_check.mjs): INC-001 12 nodes / 12 edges / 6 weight labels, hypothesis click lights the whole chain; INC-008 abstain 23 nodes, verdict column, no console errors. Graph chunk 172 kB separate from the main bundle.
+
 #### Stage 4 complete
 - POST /api/cases/draft (memory agent), POST /api/cases (edited fields, duplicate check), PATCH /api/cases/{id} (versioned edit), POST /api/cases/{id}/retire, GET /api/cases/{id}/history; case embeddings (cases.embedding vector(384) + model, migration 0005), embedded on propose/approve/edit and by init_db / `python -m backend.embed_chunks`.
 - UI: two-step "Propose case" modal (generate → edit every field: cause, summary, symptoms, evidence, fix, lessons, documents checklist, notes; duplicate warning with required reason); case detail with history, edit and retire for admin/QA. Case forms use explicit id/htmlFor labels (the walk found wrapped labels gave fields confusing accessible names).

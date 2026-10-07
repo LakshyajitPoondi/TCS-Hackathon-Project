@@ -1,56 +1,34 @@
 """Deterministic RCA scoring: evidence dict -> scored candidates, category evidence, top hypotheses.
 
-Each candidate has a hardcoded rule table of (weight, condition, evidence, narrative phrase).
-A rule adds its weight when its condition holds. Weights and cut-offs are global and fixed.
-Output is hypotheses, never diagnoses.
+Each candidate has a rule table of (weight, condition, evidence, narrative phrase) in code; the weight bands,
+thresholds, categories, display names and texts come from config/cause_categories.yaml.
+A rule adds its weight when its condition holds. Output is hypotheses, never diagnoses.
 """
 
-# ---- Weight bands ----
-W_STRONG = 3        # strong signal evidence
-W_MODERATE = 2      # moderate signal evidence
-W_WEAK = 1          # weak / non-specific signal (e.g. defects up for machine subcauses)
-W_NOTE = 1          # operator-note keyword: one rule per category, so +1 max
-W_HEALTH = 1        # health watch/degraded on target machine: machine subcauses only, +1 max
-W_CONTRA_STRONG = -3
-W_CONTRA = -2
+from engine.cause_config import CONFIG
 
-# ---- Eligibility & confidence (apply to every returned hypothesis) ----
-MIN_SCORE = 5       # strong signal + at least moderate corroboration; note+health alone (2) never reach it. Was 4 (see progress.md)
-MEDIUM_SCORE = 6
-HIGH_SCORE = 8
-MAX_HYPOTHESES = 3
+# ---- Weight bands and thresholds: config/cause_categories.yaml (validated at start-up) ----
+W_STRONG = CONFIG.weights.strong            # strong signal evidence
+W_MODERATE = CONFIG.weights.moderate        # moderate signal evidence
+W_WEAK = CONFIG.weights.weak                # weak / non-specific signal (e.g. defects up for machine subcauses)
+W_NOTE = CONFIG.weights.note                # operator-note keyword: one rule per category
+W_HEALTH = CONFIG.weights.health            # health watch/degraded on target machine: machine subcauses only
+W_CONTRA_STRONG = CONFIG.weights.contra_strong
+W_CONTRA = CONFIG.weights.contra
 
-CATEGORIES = ["machine", "material", "method", "measurement", "people", "environment"]
-CANDIDATES = [  # (key, category, subcause, narrative label)
-    ("cooling", "machine", "cooling", "cooling-related machine"),
-    ("mechanical", "machine", "mechanical", "mechanical machine"),
-    ("material", "material", None, "material (batch)"),
-    ("method", "method", None, "method (changeover/setup)"),
-    ("people", "people", None, "people (handover/procedure)"),
-    ("measurement", "measurement", None, "measurement (sensor)"),
-    ("environment", "environment", None, "environmental"),
-]
+MIN_SCORE = CONFIG.thresholds.min_score     # strong signal + at least moderate corroboration; note+health alone never reach it
+MEDIUM_SCORE = CONFIG.thresholds.medium_score
+HIGH_SCORE = CONFIG.thresholds.high_score
+MAX_HYPOTHESES = CONFIG.thresholds.max_hypotheses
+
+CATEGORIES = [c.key for c in CONFIG.categories]
+CANDIDATES = [(c.key, c.category, c.subcause, c.label) for c in CONFIG.candidates]  # (key, category, subcause, narrative label)
+DISPLAY_NAMES = {c.key: c.display_name for c in CONFIG.candidates}
 LABEL = {"temperature": "Temperature", "speed": "Speed", "vibration": "Vibration", "motor_current": "Motor current"}
 
-# ---- Templated text (Phase 3 replaces wording via LLM + BM25; keep as fallback) ----
-VERIFY_SENTENCE = {
-    "cooling": "Cooling airflow, fan operation and the temperature reading should be verified before corrective action.",
-    "mechanical": "Bearing and drive condition should be verified on the machine before corrective action.",
-    "material": "The suspect lot's certificate and incoming-inspection records should be verified before corrective action.",
-    "method": "The loaded setpoints should be verified against the approved setup sheet before corrective action.",
-    "people": "Handover records and any skipped calibration step should be verified before corrective action.",
-    "measurement": "The reading should be verified against an independent instrument before corrective action.",
-    "environment": "Ambient conditions and HVAC status should be verified before corrective action.",
-}
-MISSING_CHECKS = {
-    "cooling": ["Verify physical airflow and fan operation.", "Compare the sensor against an independent temperature reading."],
-    "mechanical": ["Inspect bearings and gearbox for wear or damage.", "Take a handheld vibration reading at the drive end."],
-    "material": ["Check the lot's certificate of analysis against spec.", "Confirm whether other lines received the same lot."],
-    "method": ["Compare loaded setpoints against the approved setup sheet.", "Confirm the first-off inspection after changeover was done."],
-    "people": ["Review the shift handover log for skipped steps.", "Confirm calibration status of gauges used by the incoming shift."],
-    "measurement": ["Compare the panel reading against a handheld or housing probe.", "Check sensor wiring, connector and calibration date."],
-    "environment": ["Record ambient temperature and humidity at the line.", "Check HVAC / AC unit status for the incident period."],
-}
+# ---- Templated text (config); LLM wording may replace it, these stay as the fallback ----
+VERIFY_SENTENCE = {c.key: c.verify_sentence for c in CONFIG.candidates}
+MISSING_CHECKS = {c.key: list(c.missing_checks) for c in CONFIG.candidates}
 SOP_TITLES = {
     "SOP-002": "Downtime and Alarm Triage",
     "SOP-004": "Abnormal Vibration Investigation",
@@ -348,6 +326,8 @@ def score_hypotheses(evidence: dict) -> dict:
             "contradicting": [ev for _, ev, _ in con],
             "_sup_phrases": [ph for _, _, ph in sorted(sup, key=lambda r: -r[0]) if ph],
             "_con_phrases": [ph for _, _, ph in con if ph],
+            "_sup_weights": [w for w, _, _ in sorted(sup, key=lambda r: -r[0])],
+            "_con_weights": [w for w, _, _ in con],
         })
 
     # Category evidence: all six; machine merges cooling + mechanical (deduplicated).
@@ -370,13 +350,15 @@ def score_hypotheses(evidence: dict) -> dict:
         hypotheses.append({
             "rank": rank, "key": c["key"], "category": c["category"], "subcause": c["subcause"], "target": c["target"],
             "confidence": _confidence(c["score"]), "score": float(c["score"]),
-            "supporting_evidence": c["supporting"], "contradicting_evidence": c["contradicting"],
+            "supporting_evidence": [{**ev, "weight": w} for ev, w in zip(c["supporting"], c["_sup_weights"])],
+            "contradicting_evidence": [{**ev, "weight": w} for ev, w in zip(c["contradicting"], c["_con_weights"])],
             "missing_checks": MISSING_CHECKS[c["key"]], "verification_steps": vsteps,
             "narrative": _narrative(c["key"], c["label"], c["_sup_phrases"], c["_con_phrases"]),
         })
 
     for c in candidates:
-        c.pop("_sup_phrases"), c.pop("_con_phrases")
+        for key in ("_sup_phrases", "_con_phrases", "_sup_weights", "_con_weights"):
+            c.pop(key)
     status = "complete" if hypotheses else "insufficient_evidence"
     return {
         "status": status,
