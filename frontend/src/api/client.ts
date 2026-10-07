@@ -32,11 +32,17 @@ function readableDetail(detail: unknown): string | null {
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}${path}`, init);
+    const headers=new Headers(init?.headers);
+    const token=sessionStorage.getItem('rca_token');
+    if(token) headers.set('Authorization',`Bearer ${token}`);
+    res = await fetch(`${API_BASE_URL}${path}`, {...init, headers});
   } catch {
     throw new ApiError("Backend unavailable. Check that the API server is running.", 0);
   }
   if (!res.ok) {
+    if(res.status===401 && path!='/api/auth/login') {
+      sessionStorage.removeItem('rca_token');window.dispatchEvent(new Event('rca-auth-expired'));
+    }
     let message: string | null = null;
     try {
       message = readableDetail((await res.json())?.detail);

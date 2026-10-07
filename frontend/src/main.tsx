@@ -9,15 +9,29 @@ import { UploadPage } from "./pages/UploadPage";
 import { EvaluationsPage } from "./pages/EvaluationsPage";
 import { EmptyState } from "./components/ui/EmptyState";
 import { Button } from "./components/ui/Button";
+import {AuthProvider,Guard} from './auth';
+import {LoginPage} from './pages/LoginPage';
+import {MachinesPage,MachinePage} from './pages/MachinesPage';
+import {DocumentsPage,DocumentPage} from './pages/DocumentsPage';
+import {CasesPage,UsersPage} from './pages/ManagementPages';
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
+      <AuthProvider>
       <Routes>
+        <Route path="/login" element={<LoginPage/>}/>
+        <Route element={<Guard/>}>
         <Route element={<AppShell />}>
           <Route path="/" element={<IncidentsPage />} />
           <Route path="/incidents/:id" element={<IncidentPage />} />
-          <Route path="/upload" element={<UploadPage />} />
+          <Route element={<Guard action="upload"/>}><Route path="/upload" element={<UploadPage />} /></Route>
+          <Route path="/machines" element={<MachinesPage/>}/>
+          <Route path="/machines/:line/:short" element={<MachinePage/>}/>
+          <Route path="/documents" element={<DocumentsPage/>}/>
+          <Route path="/documents/:id" element={<DocumentPage/>}/>
+          <Route path="/cases" element={<CasesPage/>}/>
+          <Route element={<Guard action="users"/>}><Route path="/users" element={<UsersPage/>}/></Route>
           <Route path="/evaluations" element={<EvaluationsPage />} />
           <Route
             path="*"
@@ -30,7 +44,9 @@ createRoot(document.getElementById("root")!).render(
             }
           />
         </Route>
+        </Route>
       </Routes>
+      </AuthProvider>
     </BrowserRouter>
   </StrictMode>,
 );

@@ -66,6 +66,8 @@ class Evidence(BaseModel):
 
 
 class VerificationStep(BaseModel):
+    chunk_id: str | None = None
+    page_or_section: str | None = None
     step: str
     source: str  # SOP id, e.g. "SOP-007"
     source_title: str
@@ -113,6 +115,9 @@ class MachineHealth(BaseModel):
 
 
 class SimilarCase(BaseModel):
+    label: str = 'synthetic seed'
+    fix_applied: str = ''
+    match_reasons: list[str] = Field(default_factory=list)
     case_id: str
     confirmed_category: Category  # past, engineer-validated case
     confirmed_subcause: Subcause = None
@@ -121,11 +126,18 @@ class SimilarCase(BaseModel):
 
 
 class Grounding(BaseModel):
+    sections: list[dict] = Field(default_factory=list)
     passed: bool
     flagged: list[str]
 
 
 class AnalysisResponse(BaseModel):
+    investigation: dict = Field(default_factory=dict)
+    documents_accessed: list[dict] = Field(default_factory=list)
+    documents_filtered_out: list[dict] = Field(default_factory=list)
+    retrieval_status: dict = Field(default_factory=dict)
+    run_id: str | None = None
+    text_source: Literal['llm', 'template'] = 'template'
     incident_id: str
     analysis_status: AnalysisStatus
     incident_window: IncidentWindow | None
@@ -151,6 +163,9 @@ class AnalysisResponse(BaseModel):
 # ---------- Cases ----------
 
 class SaveCaseRequest(BaseModel):
+    fix_applied: str = Field(min_length=3, max_length=4000)
+    lessons: str = Field(default='', max_length=4000)
+    documents_used: list[str] = Field(default_factory=list)
     incident_id: str
     rca_draft: str
     confirmed_category: Category
@@ -167,5 +182,5 @@ class SaveCaseRequest(BaseModel):
 
 
 class SaveCaseResponse(BaseModel):
-    status: Literal["saved"]
+    status: Literal["proposed"]
     case_id: str

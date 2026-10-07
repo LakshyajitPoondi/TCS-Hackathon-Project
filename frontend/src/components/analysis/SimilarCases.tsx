@@ -25,10 +25,12 @@ export function SimilarCases({ cases }: { cases: SimilarCase[] }) {
               </div>
               <div className="min-w-0 flex-1 space-y-1.5">
                 <p className="text-sm text-ink-700">
-                  <span className="text-slate-500">Past validated category: </span>
+                  <span className="text-slate-500">{c.label} · Past category: </span>
                   <span className="font-semibold">{categoryWithSubcause(c.confirmed_category, c.confirmed_subcause)}</span>
                 </p>
                 <p className="text-sm text-slate-600">{c.similarity_description}</p>
+                <p className="text-sm">Matched: {c.match_reasons.join(', ')}</p>
+                <p className="text-sm">Fix applied: {c.fix_applied}</p>
                 <div className="flex flex-wrap gap-1.5" aria-label="Shared signals">
                   {c.shared_signals.map((s) => (
                     <Chip key={s}>{s}</Chip>

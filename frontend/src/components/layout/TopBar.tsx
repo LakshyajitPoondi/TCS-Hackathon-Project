@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Activity, Menu } from "lucide-react";
 import { health } from "../../api/endpoints";
+import {useAuth} from '../../auth';
 
 type Status = "checking" | "online" | "offline";
 
@@ -45,6 +46,7 @@ function HealthIndicator() {
 }
 
 export function TopBar({ onMenu }: { onMenu: () => void }) {
+  const {user,logout}=useAuth();
   return (
     <div className="flex h-16 items-center gap-3 border-b border-slate-200 bg-white/95 px-4 backdrop-blur lg:px-6">
       <button
@@ -64,6 +66,7 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
       <div className="ml-auto">
         <HealthIndicator />
       </div>
+      <span className="hidden text-xs sm:inline">{user?.email} · {user?.role}</span><button className="rounded-full border border-slate-200 px-3 py-2 text-sm" onClick={()=>void logout().catch(()=>{})}>Sign out</button>
     </div>
   );
 }

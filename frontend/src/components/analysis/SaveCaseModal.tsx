@@ -26,6 +26,7 @@ export function SaveCaseModal({
   const [category, setCategory] = useState<Category | "">("");
   const [subcause, setSubcause] = useState<Exclude<Subcause, null> | "">("");
   const [notes, setNotes] = useState("");
+  const [fix,setFix]=useState(''),[lessons,setLessons]=useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -36,6 +37,7 @@ export function SaveCaseModal({
       setCategory("");
       setSubcause("");
       setNotes("");
+      setFix('');setLessons('');
       setError(null);
       setSavedId(null);
       setTouched(false);
@@ -49,7 +51,7 @@ export function SaveCaseModal({
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
-    if (!category || (needsSubcause && !subcause)) return;
+    if (!category || (needsSubcause && !subcause)||fix.trim().length<3) return;
     setSaving(true);
     setError(null);
     try {
@@ -59,6 +61,7 @@ export function SaveCaseModal({
         confirmed_category: category,
         confirmed_subcause: needsSubcause ? (subcause as Exclude<Subcause, null>) : null,
         notes: notes.trim() || null,
+        fix_applied:fix.trim(),lessons,
       });
       setSavedId(res.case_id);
     } catch (err) {
@@ -69,14 +72,13 @@ export function SaveCaseModal({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Save as Validated Case">
+    <Modal open={open} onClose={onClose} title="Propose case for QA review">
       {savedId ? (
         <div className="space-y-4">
           <div className="flex items-start gap-3 rounded-md bg-success-tint p-4 text-sm text-ink-900" role="status">
             <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-success-ink" aria-hidden="true" />
             <p>
-              Case saved to Experience Memory · <span className="font-mono font-semibold">{savedId}</span>. The validated signal
-              signature can now support future incident investigations.
+              Case proposed · <span className="font-mono font-semibold">{savedId}</span>. It becomes recallable after QA or administrator approval.
             </p>
           </div>
           <div className="flex justify-end">
@@ -166,14 +168,17 @@ export function SaveCaseModal({
             />
           </div>
 
-          {error && <Alert tone="danger" title="Case not saved">{error}</Alert>}
+          <label className={labelCls}>Fix applied *<textarea className={`${field} h-auto mt-2 py-2.5`} value={fix} onChange={e=>setFix(e.target.value)} minLength={3} required/></label>
+          {touched&&fix.trim().length<3&&<p className="text-sm text-danger-ink">Describe the fix that was applied.</p>}
+          <label className={labelCls}>Lessons learned<textarea className={`${field} h-auto mt-2 py-2.5`} value={lessons} onChange={e=>setLessons(e.target.value)}/></label>
+          {error && <Alert tone="danger" title="Case not proposed">{error}</Alert>}
 
           <div className="flex flex-wrap justify-end gap-3 pt-1">
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
             <Button type="submit" loading={saving} arrow>
-              Save case
+              Submit proposal
             </Button>
           </div>
         </form>

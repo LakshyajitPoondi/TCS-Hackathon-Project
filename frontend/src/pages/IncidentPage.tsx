@@ -21,6 +21,9 @@ import { CategoryEvidenceGrid } from "../components/analysis/CategoryEvidenceGri
 import { SimilarCases } from "../components/analysis/SimilarCases";
 import { RcaDraft } from "../components/analysis/RcaDraft";
 import { SaveCaseModal } from "../components/analysis/SaveCaseModal";
+import {useAuth} from '../auth';
+import {request} from '../api/client';
+import {InvestigationPanels} from '../components/analysis/InvestigationPanels';
 
 // UI wording only — not real backend stages.
 const LOADING_LABELS = [
@@ -43,6 +46,7 @@ function useCyclingLabel(active: boolean) {
 
 export function IncidentPage() {
   const { id = "" } = useParams();
+  const {can}=useAuth();
   const { warning, setWarning } = useWarning();
 
   const [summary, setSummary] = useState<IncidentSummary | null>(null);
@@ -57,10 +61,14 @@ export function IncidentPage() {
   const [sopId, setSopId] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const resultsRef = useRef<HTMLDivElement>(null);
+  const activeRun = useRef(0);
   const loadingLabel = useCyclingLabel(analyzing);
 
   useEffect(() => {
     let alive = true;
+    activeRun.current++;
+    const historyToken=activeRun.current;
+    setAnalyzing(false);
     setSummary(null);
     setSummaryError(null);
     setSignals(null);
@@ -74,24 +82,29 @@ export function IncidentPage() {
     getSignals(id)
       .then((s) => alive && setSignals(s))
       .catch((e) => alive && setSignalsError(errorMessage(e)));
+    request<{run_id:string}[]>('/api/analyses?incident_id='+encodeURIComponent(id)).then(async runs=>{
+      if(runs.length&&alive){const result=await request<AnalysisResponse>('/api/analyses/'+runs[0].run_id);if(alive&&historyToken===activeRun.current){setAnalysis(result);setDraft(result.rca_draft);}}
+    }).catch(()=>{});
     return () => {
       alive = false;
     };
   }, [id]);
 
   const run = async () => {
+    const runToken = ++activeRun.current;
     setAnalyzing(true);
     setAnalyzeError(null);
     try {
       const res = await analyzeIncident(id);
+      if (runToken !== activeRun.current) return;
       setAnalysis(res);
       setDraft(res.rca_draft); // engineer edits reset only on a new analysis
       setWarning(res.warning);
       window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
     } catch (e) {
-      setAnalyzeError(errorMessage(e));
+      if (runToken === activeRun.current) setAnalyzeError(errorMessage(e));
     } finally {
-      setAnalyzing(false);
+      if (runToken === activeRun.current) setAnalyzing(false);
     }
   };
 
@@ -143,7 +156,7 @@ export function IncidentPage() {
           )}
         </div>
         <div className="flex flex-col items-start gap-2 sm:items-end">
-          <Button
+          {can('analyze')&&<Button
             size="lg"
             onClick={run}
             loading={analyzing}
@@ -152,7 +165,7 @@ export function IncidentPage() {
             icon={!analyzing ? <Play size={18} aria-hidden="true" /> : undefined}
           >
             {analyzing ? "Analyzing…" : analysis ? "Re-run RCA Analysis" : "Run RCA Analysis"}
-          </Button>
+          </Button>}
           {analyzing && (
             <p className="text-sm text-slate-600" aria-live="polite">
               {loadingLabel}
@@ -237,6 +250,7 @@ export function IncidentPage() {
           )}
 
           <CategoryEvidenceGrid items={analysis.category_evidence} />
+          <InvestigationPanels analysis={analysis}/>
           <SimilarCases cases={analysis.similar_cases} />
           <RcaDraft
             value={draft}

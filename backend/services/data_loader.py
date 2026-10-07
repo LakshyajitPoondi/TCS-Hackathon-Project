@@ -9,6 +9,8 @@ import uuid
 from pathlib import Path
 
 import pandas as pd
+import numpy as np
+from backend.core import config
 
 from backend.core.config import (
     EXPECTED_COLUMNS,
@@ -92,6 +94,8 @@ def validate_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """Schema, timestamp and numeric checks. Returns a cleaned copy sorted by timestamp and machine."""
     df = df.copy()
     df.columns = [str(c).strip() for c in df.columns]
+    if df.columns.duplicated().any():
+        raise IncidentValidationError("Duplicate column names")
 
     if df.empty:
         raise IncidentValidationError("File has no data rows")
@@ -112,9 +116,30 @@ def validate_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         if present.sum() == 0 or unparseable / present.sum() > MAX_UNPARSEABLE_FRACTION:
             raise IncidentValidationError(f"Column '{col}' has mostly non-numeric values")
         df[col] = parsed
+        if np.isinf(parsed).any():
+            raise IncidentValidationError(f"Column '{col}' contains non-finite values")
+        lo, hi = config.PHYSICAL_RANGES[col]
+        if ((parsed < lo) | (parsed > hi)).any():
+            raise IncidentValidationError(f"Column '{col}' must be between {lo} and {hi}")
+        if col == "defect_count" and ((parsed.dropna() % 1) != 0).any():
+            raise IncidentValidationError("defect_count must contain integer counts")
 
     if df["machine"].isna().all():
         raise IncidentValidationError("Column 'machine' has no values")
+    for field in ("machine", "line"):
+        if df[field].isna().any() or df[field].astype(str).str.strip().eq("").any():
+            raise IncidentValidationError(f"Column '{field}' has missing values")
+    if df.duplicated(["line", "machine", "timestamp"]).any():
+        raise IncidentValidationError("Duplicate machine timestamps")
+    if df["line"].nunique() != 1:
+        raise IncidentValidationError("One incident must contain one line")
+    for machine, group in df.groupby("machine"):
+        if group["timestamp"].nunique() < 10:
+            raise IncidentValidationError(f"{machine}: at least 10 timesteps required")
+        baseline = group.sort_values("timestamp").head(max(4, round(len(group) * .25)))
+        for signal in ("temperature", "speed", "vibration", "motor_current"):
+            if group[signal].notna().sum() < 10 or baseline[signal].notna().sum() < 3:
+                raise IncidentValidationError(f"{machine}: insufficient usable {signal} baseline/data")
 
     return df.sort_values(["timestamp", "machine"], kind="stable").reset_index(drop=True)
 
@@ -123,11 +148,27 @@ def load_incident(incident_id: str) -> pd.DataFrame:
     return validate_dataframe(_read_csv(resolve_incident_path(incident_id)))
 
 
-def save_upload(content: bytes) -> dict:
+def save_upload(content: bytes, original_filename: str = "incident.csv") -> dict:
     """Validate an uploaded CSV, then store it under data/uploads/ and return its id."""
-    validate_dataframe(_read_csv(io.BytesIO(content)))
+    if not original_filename.lower().endswith(".csv"):
+        raise IncidentValidationError("Only .csv files are supported")
+    if len(content) > config.UPLOAD_MAX_MB * 1024 * 1024:
+        raise IncidentValidationError("CSV exceeds UPLOAD_MAX_MB")
+    frame=validate_dataframe(_read_csv(io.BytesIO(content)))
+    from backend import db
+    with db.Session() as session:
+        for short,group in frame.groupby('machine'):
+            uid=str(group.line.iloc[0])+'/'+short
+            machine=session.get(db.Machine,uid)
+            if not machine:raise IncidentValidationError('Unknown physical machine: '+uid)
+            # Baseline ranges are descriptive. Large multipliers reject unit mistakes
+            # without rejecting genuine anomalies; global physical bounds still apply.
+            for signal,multiplier in [('speed',5),('vibration',20),('motor_current',10)]:
+                normal=machine.data.get('normal_ranges',{}).get(signal)
+                if normal and normal['max']>0 and (group[signal]>normal['max']*multiplier).any():
+                    raise IncidentValidationError(f'{uid}: {signal} exceeds generous baseline plausibility bound')
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    short = uuid.uuid4().hex[:8]
+    short = uuid.uuid4().hex
     filename = f"upload_{short}.csv"
     (UPLOADS_DIR / filename).write_bytes(content)
     return {"id": filename_to_incident_id(filename), "filename": filename}

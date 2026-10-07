@@ -22,10 +22,12 @@ from backend.models.schemas import (
     VerificationStep,
 )
 from engine import llm
+from engine import retrieval
+from engine.agent import investigate
 from engine.grounding import check_detailed
 from engine.memory import build_signature, recall
 from engine.rag import SOP_INDEX, TRIAGE_SOP, get_sop, retrieve_for_hypothesis
-from engine.scoring import CATEGORIES, score_hypotheses
+from engine.scoring import CATEGORIES, MIN_SCORE, score_hypotheses
 from engine.signals import analyze_signals
 
 log = logging.getLogger("rca.analysis")
@@ -80,13 +82,13 @@ def _template_draft(incident_id: str, evidence: dict, hyps: list[dict], steps: d
               "Missing verification:"]
     lines += [f"- {m}" for m in top["missing_checks"]]
     lines += ["", "Verification actions:"]
-    lines += [f"- {s['step']} ({s['source']} {SOP_INDEX[s['source']]['title']})" for s in steps[top["rank"]]]
+    lines += [f"- {s['step']} ({s['source']}, {s.get('chunk_id', '')})" for s in steps[top["rank"]]]
     lines += ["", WARNING]
     return "\n".join(lines)
 
 
 def _abstain_draft(incident_id: str, evidence: dict, scored: dict) -> str:
-    sops = [get_sop(TRIAGE_SOP)] + ([get_sop(MEASUREMENT_SOP)] if evidence.get("deviating_pairs") else [])
+    sops = []
     lines = [f"RCA draft: {incident_id}", "", "Status: Insufficient evidence - additional verification required.", "",
              "Incident summary:", _summary_line(evidence) if evidence.get("kpis") else "No KPIs available."]
     reason = evidence.get("reason") or scored.get("abstain_reason")
@@ -106,6 +108,7 @@ def _llm_input(incident_id, evidence, hyps, retrieved, similar) -> dict:
     strip = lambda evs: [{"description": e["description"], "machine": e["machine"], "value": e["value"]} for e in evs]  # noqa: E731
     return {
         "incident_id": incident_id,
+        "scoring_policy":{'minimum_score':MIN_SCORE},
         "window": {"start": w["start"], "end": w["end"], "detected_by": w["detected_by"]} if w else None,
         "kpis": {f: evidence["kpis"][f] for f in KPI_FIELDS},
         "machine_health": evidence.get("health", []),
@@ -113,7 +116,8 @@ def _llm_input(incident_id, evidence, hyps, retrieved, similar) -> dict:
             "rank": h["rank"], "category": h["category"], "subcause": h["subcause"], "confidence": h["confidence"],
             "target_machine": h.get("target"), "supporting_evidence": strip(h["supporting_evidence"]),
             "contradicting_evidence": strip(h["contradicting_evidence"]), "missing_checks": h["missing_checks"],
-            "sops": [{"id": s["id"], "title": s["title"], "steps": s["steps"]} for s in retrieved[h["rank"]]],
+            "sops": [{"id": s["doc_id"], "title": s["title"], "steps": [s['text']], "chunk_id":s['chunk_id']} for s in retrieved[h["rank"]]],
+            "chunks": retrieved[h['rank']],
         } for h in hyps],
         "similar_cases": [c.model_dump() for c in similar],
         "validation_warning": WARNING,
@@ -123,28 +127,46 @@ def _llm_input(incident_id, evidence, hyps, retrieved, similar) -> dict:
 def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, dict]:
     """Returns (response, meta). meta = {text_source, retrieved_sops{rank: [ids]}, signature}."""
     evidence = analyze_signals(df)
+    llm.reset_calls()
     scored = score_hypotheses(evidence)
     hyps = scored["hypotheses"]
     signature = build_signature(evidence)
-    similar = recall(signature, exclude_incident_id=incident_id)
+    line=str(df['line'].iloc[0]);machines=sorted(df['machine'].unique())
+    target=hyps[0].get('target') if hyps else None
+    context={'machine_uid':line+'/'+target if target in machines else None,'line':line,'model':'IMM',
+             'confirmed_category':hyps[0]['category'] if hyps else None,'confirmed_subcause':hyps[0]['subcause'] if hyps else None,
+             'events':sorted(df['event_code'].dropna().unique())}
+    similar = recall(signature, exclude_incident_id=incident_id,context=context)
+    rag_results={h['rank']:retrieval.for_hypothesis(h,line,machines) for h in hyps}
+    if not hyps:
+        rag_results={0:retrieval.search([line+'/'+m for m in machines],'incident triage measurement verification')}
+    accessed,filtered=retrieval.provenance(rag_results)
+    investigation,trace=investigate(incident_id,line,machines,evidence,hyps,signature,rag_results,context)
 
     if not hyps:
         draft = _abstain_draft(incident_id, evidence, scored)
+        steps=retrieval.verification_steps(rag_results[0]['hits'])
+        draft=draft.replace(WARNING,'')+'\n'+ '\n'.join(s['step'] for s in steps)+'\n'+WARNING
         final = {"hypotheses": [], "rca_draft": draft}
-        grounding, source, retrieved = Grounding(passed=True, flagged=[]), "template", {}
+        observed=[e for c in CATEGORIES for e in scored['category_evidence'][c]['supporting']]
+        grounding,_=check_detailed(final,{'scoring_policy':{'minimum_score':MIN_SCORE},'kpis':evidence.get('kpis',{}),'observed_evidence':observed,'chunks':rag_results[0]['hits']},{})
+        source, retrieved = 'template', {}
     else:
         triage = _needs_triage(evidence)
-        retrieved = {h["rank"]: _retrieve(h, triage) for h in hyps}
-        tpl_steps = {h["rank"]: _template_steps(retrieved[h["rank"]], triage) for h in hyps}
+        retrieved = {h['rank']:rag_results[h['rank']]['hits'] for h in hyps}
+        tpl_steps = {h['rank']:retrieval.verification_steps(retrieved[h['rank']]) for h in hyps}
         template = {
-            "hypotheses": [{"rank": h["rank"], "narrative": h["narrative"], "verification_steps": tpl_steps[h["rank"]]}
+            "hypotheses": [{"rank": h["rank"], "narrative": f"The {_hyp_name(h)} hypothesis requires verification. "+' '.join(e['description'] for e in h['supporting_evidence'][:3]), "verification_steps": tpl_steps[h["rank"]]}
                            for h in hyps],
             "rca_draft": _template_draft(incident_id, evidence, hyps, tpl_steps),
         }
         llm_input = _llm_input(incident_id, evidence, hyps, retrieved, similar)
+        llm_input['template_draft']=template['rca_draft']
+        for h, t in zip(llm_input['hypotheses'], template['hypotheses']):
+            h['template_narrative']=t['narrative'];h['template_steps']=t['verification_steps']
         out, source = llm.generate(incident_id, llm_input)
         final = out or template
-        retrieved_ids = {r: [s["id"] for s in sops] for r, sops in retrieved.items()}
+        retrieved_ids = {r: [s["doc_id"] for s in sops] for r, sops in retrieved.items()}
         grounding, bad = check_detailed(final, llm_input, retrieved_ids)
         if source == "llm" and grounding.passed:
             llm.save_cache(incident_id, llm_input, final)
@@ -159,10 +181,19 @@ def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, 
             } for r in tpl_by_rank],
             "rca_draft": template["rca_draft"] if bad["draft"] else final["rca_draft"],
         }
+        for section in grounding.sections:
+            match=__import__('re').search(r'hypothesis (\d+) (narrative|step)',section['section'])
+            section['replaced']=bool(match and int(match[1]) in bad['narrative' if match[2]=='narrative' else 'steps']) or (section['section']=='rca_draft' and bad['draft'])
+        final_check,_=check_detailed(final,llm_input,retrieved_ids)
+        grounding.passed=final_check.passed
 
     text = {h["rank"]: h for h in final["hypotheses"]}
     w, kpis = evidence.get("window"), evidence.get("kpis")
     response = AnalysisResponse(
+        investigation=investigation,
+        documents_accessed=accessed,documents_filtered_out=filtered,
+        retrieval_status={str(r):v['embedding_status'] for r,v in rag_results.items()},
+        text_source=source,
         incident_id=incident_id,
         analysis_status=scored["status"],
         incident_window=IncidentWindow(start=w["start"], end=w["end"], detected_by=w["detected_by"]) if w else None,
@@ -179,8 +210,9 @@ def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, 
                 score=h["score"], supporting_evidence=[Evidence(**e) for e in h["supporting_evidence"]],
                 contradicting_evidence=[Evidence(**e) for e in h["contradicting_evidence"]],
                 missing_checks=h["missing_checks"],
-                verification_steps=[VerificationStep(step=s["step"], source=s["source"],
-                                                     source_title=SOP_INDEX[s["source"]]["title"])
+                verification_steps=[VerificationStep(step=s["step"], source=s["source"],chunk_id=s.get('chunk_id'),
+                                                     source_title=next((hit['title'] for hit in retrieved[h['rank']] if hit['doc_id']==s['source']),s['source']),
+                                                     page_or_section=next((hit['page_or_section'] for hit in retrieved[h['rank']] if hit['chunk_id']==s.get('chunk_id')),None))
                                     for s in text[h["rank"]]["verification_steps"]],
                 narrative=text[h["rank"]]["narrative"],
             )
@@ -190,7 +222,7 @@ def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, 
         rca_draft=final["rca_draft"],
         grounding=grounding,
     )
-    meta = {"text_source": source, "retrieved_sops": {r: [s["id"] for s in v] for r, v in retrieved.items()},
+    meta = {"trace":trace, "llm_calls":llm.calls(), "text_source": source, "retrieved_sops": {r: [s["doc_id"] for s in v] for r, v in retrieved.items()},
             "signature": signature}
     log.info("analysis %s: status=%s text_source=%s grounding=%s", incident_id, scored["status"], source, grounding.passed)
     return response, meta

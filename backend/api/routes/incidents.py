@@ -1,4 +1,5 @@
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, UploadFile, Depends
+from backend.auth import require
 
 from backend.models.schemas import IncidentRef, IncidentSummary, SignalsResponse
 from backend.services import data_loader
@@ -13,8 +14,12 @@ def list_incidents():
 
 
 @router.post("/upload", response_model=IncidentRef)
-async def upload_incident(file: UploadFile = File(...)):
-    return data_loader.save_upload(await file.read())
+async def upload_incident(file: UploadFile = File(...), user=Depends(require("upload"))):
+    from backend.core.config import UPLOAD_MAX_MB
+    result=data_loader.save_upload(await file.read(int(UPLOAD_MAX_MB * 1024 * 1024) + 1), file.filename or "")
+    from backend import db
+    with db.Session.begin() as session: db.audit(session,user.id,"upload_incident",result)
+    return result
 
 
 @router.get("/{incident_id}", response_model=IncidentSummary)

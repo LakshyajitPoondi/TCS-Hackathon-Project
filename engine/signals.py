@@ -57,7 +57,7 @@ BATCH_SHARE_MIN = 0.5       # top batch holds >= 50% of window defects
 BATCH_CONCENTRATION_MIN = 2.0  # top batch defect rate >= 2x mean of other batches
 
 # ---- Event precedence ----
-PRECEDE_LOOKBACK = 5        # steps before window start (5 x 2 min = 10 min)
+PRECEDE_LOOKBACK = 10       # 20-minute maximum event context; always strictly before detected start
 PRECEDE_LOOKAHEAD = 2       # steps after start (events can land on the boundary)
 
 # ---- Operator-note keywords (word-boundary, case-insensitive, optional plural "s") ----
@@ -180,11 +180,11 @@ def analyze_signals(df: pd.DataFrame) -> dict:
 
     tot_def = defects_m.sum(axis=1).to_numpy(float)
     b_mu, b_sd = tot_def[:nb].mean(), max(tot_def[:nb].std(ddof=1), COUNT_STD_FLOOR)
-    mark(tot_def > b_mu + DEFECT_K * b_sd, "defect increase")
+    mark(pd.Series(tot_def).rolling(3).mean().to_numpy() > b_mu + DEFECT_K * b_sd / np.sqrt(3), "defect increase")
     for m in machines:
         d = defects_m[m].to_numpy(float)
         mu, sd = d[:nb].mean(), max(d[:nb].std(ddof=1), COUNT_STD_FLOOR)
-        mark(d > mu + DEFECT_K * sd, "defect increase")
+        mark(pd.Series(d).rolling(3).mean().to_numpy() > mu + DEFECT_K * sd / np.sqrt(3), "defect increase")
     tot_dt = downtime_m.sum(axis=1).to_numpy(float)
     dt_mu, dt_sd = tot_dt[:nb].mean(), tot_dt[:nb].std(ddof=1)
     mark(tot_dt > 0 if dt_mu == 0 else tot_dt > dt_mu + DEFECT_K * max(dt_sd, COUNT_STD_FLOOR), "downtime")
@@ -375,7 +375,7 @@ def analyze_signals(df: pd.DataFrame) -> dict:
     def precedence(code):
         found = {"before_incident": False, "machine": None, "timestamp": None, "anywhere_in_file": bool((df["code"] == code).any())}
         if window:
-            rows = df[(df["code"] == code) & df["step"].between(ws - PRECEDE_LOOKBACK, ws + PRECEDE_LOOKAHEAD)]
+            rows = df[(df["code"] == code) & df["step"].between(ws - PRECEDE_LOOKBACK, ws - 1)]
             if len(rows):
                 found.update({"before_incident": True, "machine": sorted(rows["machine"].unique().tolist()),
                               "timestamp": rows["timestamp"].iloc[0].isoformat(), "steps_before_start": int(ws - rows["step"].iloc[0])})

@@ -9,8 +9,10 @@ import { Card } from "../components/ui/Card";
 import { Alert } from "../components/ui/Alert";
 import { Skeleton } from "../components/ui/Spinner";
 import { EmptyState } from "../components/ui/EmptyState";
+import {useAuth} from '../auth';
 
 export function IncidentsPage() {
+  const {can}=useAuth();
   const [incidents, setIncidents] = useState<IncidentRef[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
@@ -34,9 +36,9 @@ export function IncidentsPage() {
             Investigate production incidents using evidence-driven RCA hypotheses, machine-health context and SOP-backed verification.
           </p>
         </div>
-        <Button variant="secondary" to="/upload" icon={<Upload size={18} aria-hidden="true" />}>
+        {can('upload')&&<Button variant="secondary" to="/upload" icon={<Upload size={18} aria-hidden="true" />}>
           Upload CSV
-        </Button>
+        </Button>}
       </div>
 
       {error && (

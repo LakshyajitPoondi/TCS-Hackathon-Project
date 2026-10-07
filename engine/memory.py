@@ -1,14 +1,6 @@
-"""Experience Memory (local JSON). Similar cases are supporting context only; they never change scores or ranks.
+"""Approved SQLite experience memory, used only as explanatory context."""
 
-Signatures use the vocabulary of data/memory_seed.json ("signals" lists). The seed file is read-only;
-saved cases are appended to data/memory_cases.json. Hindsight adapter deferred (MEMORY_BACKEND=local only).
-"""
 
-import json
-import re
-from datetime import datetime, timezone
-
-from backend.core.config import MEMORY_CASES_PATH, MEMORY_SEED_PATH
 from backend.models.schemas import SimilarCase
 
 MIN_SHARED = 2
@@ -61,23 +53,17 @@ def build_signature(evidence: dict) -> list[str]:
     return sorted(t for t, on in tags.items() if on)
 
 
-def _read(path) -> list[dict]:
-    if not path.exists():
-        return []
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return []
-    return data if isinstance(data, list) else list(data.values())
-
-
 def all_cases() -> list[dict]:
-    return _read(MEMORY_SEED_PATH) + _read(MEMORY_CASES_PATH)
+    from backend.db import Session, Case
+    from sqlalchemy import select
+    with Session() as session:
+        return [{**c.data, "case_id":c.case_id, "source_incident_id":c.source_incident_id} for c in session.scalars(select(Case).where(Case.status == "approved"))]
 
 
-def recall(signature: list[str], exclude_incident_id: str | None = None, top_k: int = TOP_K) -> list[SimilarCase]:
+def recall(signature: list[str], exclude_incident_id: str | None = None, top_k: int = TOP_K, context: dict | None = None) -> list[SimilarCase]:
     sig = set(signature)
     scored = []
+    context=context or {}
     for case in all_cases():
         if exclude_incident_id and case.get("source_incident_id") == exclude_incident_id:
             continue
@@ -85,29 +71,18 @@ def recall(signature: list[str], exclude_incident_id: str | None = None, top_k: 
         shared = sig & tags
         if len(shared) < MIN_SHARED:
             continue
-        jaccard = len(shared) / len(sig | tags)
-        scored.append((jaccard, len(shared), case, sorted(shared)))
+        score=3*len(shared)/max(1,len(sig|tags));reasons=[f'{len(shared)} shared signal tags']
+        for field,weight in [('machine_uid',5),('line',2),('model',1),('confirmed_category',4),('confirmed_subcause',2)]:
+            if context.get(field) and context[field]==case.get(field):score+=weight;reasons.append(field+' agrees')
+        event_shared=set(context.get('events',[])) & set(case.get('events',[]))
+        if event_shared:score+=len(event_shared);reasons.append('shared events: '+', '.join(sorted(event_shared)))
+        scored.append((score, len(shared), case, sorted(shared),reasons))
     scored.sort(key=lambda r: (-r[0], -r[1], r[2]["case_id"]))
     return [
         SimilarCase(case_id=c["case_id"], confirmed_category=c["confirmed_category"],
+                    label=c.get('label','synthetic seed'),fix_applied=c.get('fix_applied',''),match_reasons=reasons,
                     confirmed_subcause=c.get("confirmed_subcause"), shared_signals=shared,
                     similarity_description=f"Shares {len(shared)} of {len(c.get('signals', []))} key signals with {c['case_id']}.")
-        for _, _, c, shared in scored[:top_k]
+        for _, _, c, shared, reasons in scored[:top_k]
     ]
 
-
-def _next_case_id(cases: list[dict]) -> str:
-    """Continue the seed convention: INC-H12 -> INC-H13 (keeps zero-padding width)."""
-    nums = [(int(m.group(1)), len(m.group(1))) for c in cases if (m := re.match(r"^INC-H(\d+)$", c.get("case_id", "")))]
-    n, width = (max(nums)[0], max(w for _, w in nums)) if nums else (0, 2)
-    return f"INC-H{n + 1:0{width}d}"
-
-
-def retain(case: dict) -> str:
-    """Append a saved case to memory_cases.json. `case` must hold `signals`, `confirmed_category`,
-    `confirmed_subcause`, `source_incident_id`; a case_id and saved_at are assigned here."""
-    saved = _read(MEMORY_CASES_PATH)
-    case_id = _next_case_id(all_cases())
-    record = {"case_id": case_id, **case, "saved_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
-    MEMORY_CASES_PATH.write_text(json.dumps(saved + [record], indent=2, ensure_ascii=False), encoding="utf-8")
-    return case_id
