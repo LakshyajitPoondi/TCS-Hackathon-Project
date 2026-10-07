@@ -53,17 +53,64 @@ def build_signature(evidence: dict) -> list[str]:
     return sorted(t for t, on in tags.items() if on)
 
 
+SEMANTIC_WEIGHT = 3.0      # score += 3 * cosine(summary embeddings) when cosine >= SEMANTIC_MIN
+SEMANTIC_MIN = 0.5
+TOP_HYPOTHESIS_WEIGHT = 1  # B15: small, separately shown; memory must not simply echo the engine's guess
+CONTEXT_WEIGHTS = [('machine_uid', 5), ('line', 2), ('model', 1), ('confirmed_category', 4), ('confirmed_subcause', 2)]
+
+
+def case_text(data: dict) -> str:
+    """Text embedded for a case: engineer-confirmed summary, symptoms, fix and lessons."""
+    parts = [data.get('summary', ''), data.get('evidence_summary', ''), ' '.join(data.get('symptoms', []) or []),
+             data.get('fix_applied', ''), data.get('lessons', '')]
+    return ' '.join(p for p in parts if p).strip()
+
+
+def embed_case(case) -> bool:
+    """Embed one Case row in place (caller commits). Returns False when embeddings are off or fail."""
+    from engine import retrieval
+    from backend.core import config
+    if config.EMBEDDINGS_PROVIDER == 'none':
+        return False
+    try:
+        vector = retrieval.embed([case_text(case.data) or case.case_id])[0]
+        retrieval._check_vector(vector)
+        case.embedding, case.embedding_model = list(map(float, vector)), retrieval.embedding_key()
+        return True
+    except Exception:
+        return False
+
+
 def all_cases() -> list[dict]:
+    """Approved cases only: proposed, rejected and retired cases are never recalled."""
     from backend.db import Session, Case
     from sqlalchemy import select
     with Session() as session:
-        return [{**c.data, "case_id":c.case_id, "source_incident_id":c.source_incident_id} for c in session.scalars(select(Case).where(Case.status == "approved"))]
+        return [{**c.data, "case_id": c.case_id, "source_incident_id": c.source_incident_id,
+                 "_embedding": c.embedding, "_embedding_model": c.embedding_model}
+                for c in session.scalars(select(Case).where(Case.status == "approved"))]
+
+
+def _query_vector(text):
+    from engine import retrieval
+    from backend.core import config
+    if not text or config.EMBEDDINGS_PROVIDER == 'none':
+        return None, None
+    try:
+        return retrieval.embed_query(text), retrieval.embedding_key()
+    except Exception:
+        return None, None
 
 
 def recall(signature: list[str], exclude_incident_id: str | None = None, top_k: int = TOP_K, context: dict | None = None) -> list[SimilarCase]:
+    """Weighted recall over approved cases. Factors: shared signal tags (required), physical machine, line, model,
+    confirmed category/subcause of the reference (when given), shared events, summary-embedding similarity,
+    and a small separately-labelled bonus when a case agrees with the current top hypothesis (B15)."""
+    import numpy as np
     sig = set(signature)
     scored = []
-    context=context or {}
+    context = context or {}
+    qvec, qkey = _query_vector(context.get('query_text'))
     for case in all_cases():
         if exclude_incident_id and case.get("source_incident_id") == exclude_incident_id:
             continue
@@ -71,18 +118,25 @@ def recall(signature: list[str], exclude_incident_id: str | None = None, top_k: 
         shared = sig & tags
         if len(shared) < MIN_SHARED:
             continue
-        score=3*len(shared)/max(1,len(sig|tags));reasons=[f'{len(shared)} shared signal tags']
-        for field,weight in [('machine_uid',5),('line',2),('model',1),('confirmed_category',4),('confirmed_subcause',2)]:
-            if context.get(field) and context[field]==case.get(field):score+=weight;reasons.append(field+' agrees')
-        event_shared=set(context.get('events',[])) & set(case.get('events',[]))
-        if event_shared:score+=len(event_shared);reasons.append('shared events: '+', '.join(sorted(event_shared)))
-        scored.append((score, len(shared), case, sorted(shared),reasons))
+        score = 3*len(shared)/max(1, len(sig | tags)); reasons = [f'{len(shared)} shared signal tags']
+        for field, weight in CONTEXT_WEIGHTS:
+            if context.get(field) and context[field] == case.get(field): score += weight; reasons.append(field+' agrees')
+        top = context.get('top_hypothesis')
+        if top and top.get('category') == case.get('confirmed_category') and top.get('subcause') == case.get('confirmed_subcause'):
+            score += TOP_HYPOTHESIS_WEIGHT; reasons.append(f'matches current top hypothesis (+{TOP_HYPOTHESIS_WEIGHT}, context only)')
+        event_shared = set(context.get('events', [])) & set(case.get('events', []))
+        if event_shared: score += len(event_shared); reasons.append('shared events: '+', '.join(sorted(event_shared)))
+        if qvec is not None and case.get('_embedding') is not None and case.get('_embedding_model') == qkey:
+            a, b = np.asarray(qvec, dtype=float), np.asarray(case['_embedding'], dtype=float)
+            sim = float(a @ b / max(np.linalg.norm(a)*np.linalg.norm(b), 1e-12))
+            if sim >= SEMANTIC_MIN:
+                score += SEMANTIC_WEIGHT*sim; reasons.append(f'summary similarity {sim:.2f}')
+        scored.append((score, len(shared), case, sorted(shared), reasons))
     scored.sort(key=lambda r: (-r[0], -r[1], r[2]["case_id"]))
     return [
         SimilarCase(case_id=c["case_id"], confirmed_category=c["confirmed_category"],
-                    label=c.get('label','synthetic seed'),fix_applied=c.get('fix_applied',''),match_reasons=reasons,
+                    label=c.get('label', 'synthetic seed'), fix_applied=c.get('fix_applied', ''), match_reasons=reasons,
                     confirmed_subcause=c.get("confirmed_subcause"), shared_signals=shared,
                     similarity_description=f"Shares {len(shared)} of {len(c.get('signals', []))} key signals with {c['case_id']}.")
         for _, _, c, shared, reasons in scored[:top_k]
     ]
-

@@ -142,8 +142,9 @@ def _run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse,
     line=str(df['line'].iloc[0]);machines=sorted(df['machine'].unique())
     target=hyps[0].get('target') if hyps else None
     context={'machine_uid':line+'/'+target if target in machines else None,'line':line,'model':'IMM',
-             'confirmed_category':hyps[0]['category'] if hyps else None,'confirmed_subcause':hyps[0]['subcause'] if hyps else None,
-             'events':sorted(df['event_code'].dropna().unique())}
+             'top_hypothesis':{'category':hyps[0]['category'],'subcause':hyps[0]['subcause']} if hyps else None,
+             'events':sorted(df['event_code'].dropna().unique()),
+             'query_text':' '.join([(hyps[0]['category']+' '+(hyps[0]['subcause'] or '')) if hyps else '']+[e['description'] for h in hyps[:1] for e in h['supporting_evidence']])}
     similar = recall(signature, exclude_incident_id=incident_id,context=context)
     rag_results={h['rank']:retrieval.for_hypothesis(h,line,machines) for h in hyps}
     if not hyps:

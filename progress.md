@@ -2,7 +2,7 @@
 
 ## v2 build (branch feature/v2, from main c58eed5)
 Prompt: v2 stages 0–9 (see audit_report_v2.md for bug IDs B1–B20). Each stage ends with checks, this file, and a commit "v2 stage N: …".
-**Next unfinished stage: 4.**
+**Next unfinished stage: 5.**
 
 ### Live LLM call counter (budget 10 for the whole build)
 Used: 2 of 10.
@@ -29,9 +29,20 @@ Used: 2 of 10.
 - D3.4 Users gained `name` (display name; falls back to a title-cased email local part). Seeded names: Administrator, Plant Engineer, QA Lead, Viewer.
 - D3.5 PDF export uses fpdf2 core fonts (Latin-1); symbols such as → ≥ ± are transliterated. The validation notice is added by the server at the top and bottom of every export.
 - D3.6 UPLOADS_DIR is configurable (tests/eval workers use temp folders). The headless walk uses its own database `rca_walk` and in-memory auth values so the owner's `rca` database never gets throwaway demo passwords.
+- D4.1 Memory agent: the LLM words only symptoms, evidence summary, lessons and the summary paragraph (one request, budget scope 1, cached as kind memory_summary). The suggested cause is the deterministic top hypothesis and documents_used is prefilled from documents_accessed; fix_applied always starts empty. Any LLM field containing a number not present in the evidence or draft is replaced by the template field (reason shown in the modal).
+- D4.2 Duplicates (B7): blocking 409 with the list unless the engineer gives a reason (stored as duplicate_override). Same-incident check covers proposed + approved cases; similarity check covers approved cases with the same machine + category + subcause and cosine ≥ 0.90 between case texts (summary + evidence + symptoms + fix + lessons); without embeddings, ≥ 80 % shared signal tags.
+- D4.3 Recall: semantic factor = +3 × cosine (only when ≥ 0.5), reason "summary similarity 0.xx". B15: analysis no longer passes the top hypothesis as `confirmed_category` (+4/+2); it is a separate +1 reason "matches current top hypothesis (+1, context only)". Hypothesis ranking is untouched. The memory eval still passes a reference case's own confirmed cause (that is a property of the case, not the engine).
+- D4.4 Lifecycle: edit/retire only for approved cases, by admin or qa_lead, with a reason; the previous data is stored in case_versions; data.version increments; all actions audited; GET /api/cases/{id}/history. Retired cases are listed (status filter) but never recalled; the incident status ignores retired cases.
 - D1.7 Code defaults changed to DATABASE_URL=postgresql+psycopg://rca:rca@localhost:5433/rca and EMBEDDINGS_PROVIDER=fastembed. The owner's .env still says sqlite + none, so the owner must change those two lines to use Postgres/pgvector.
 
 ### v2 stage log
+#### Stage 4 complete
+- POST /api/cases/draft (memory agent), POST /api/cases (edited fields, duplicate check), PATCH /api/cases/{id} (versioned edit), POST /api/cases/{id}/retire, GET /api/cases/{id}/history; case embeddings (cases.embedding vector(384) + model, migration 0005), embedded on propose/approve/edit and by init_db / `python -m backend.embed_chunks`.
+- UI: two-step "Propose case" modal (generate → edit every field: cause, summary, symptoms, evidence, fix, lessons, documents checklist, notes; duplicate warning with required reason); case detail with history, edit and retire for admin/QA. Case forms use explicit id/htmlFor labels (the walk found wrapped labels gave fields confusing accessible names).
+- Tests: SQLite 67 passed + 1 skipped; Postgres 68 passed. New evals/test_memory_agent.py: template draft fields, fake-LLM draft = 1 request then cached, invented-number guard, edits stored, duplicate same incident (409 → reason → 201), similar approved case (signal overlap and embedding paths), edit versioning + history + permissions, retire never recalled, end-to-end recall with semantic reason and B15. RBAC matrix extended (draft, history, edit, retire).
+- Evals (Postgres + fastembed): memory leave-one-out agreement 0.833 (≥ 0.7), all suites pass; ranking 16/16, 16/16, 2/2.
+- Headless walk now 9/9 (added: QA edits approved case → version 2 kept, retires it, INC-009 re-analysis no longer recalls it). No live LLM calls in this stage (counter still 2/10).
+
 #### Stage 3 complete
 - B5: GET /api/incidents lists sample + uploaded incidents with source label, line/machines, date, top hypothesis and status (uploads still never enter evals). Status badge on dashboard, incident list, incident page, machine page; cases show case status.
 - B8: table rca_drafts, versioned saves, history with view + restore (restore = new version), Markdown/PDF export with an irremovable validation notice, viewers read-only. Saved draft is loaded on page open.

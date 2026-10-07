@@ -1,6 +1,7 @@
-"""(Re)embed document chunks with the configured local model. Run: python -m backend.embed_chunks [--all]
+"""(Re)embed document chunks and case summaries with the configured local model.
+Run: python -m backend.embed_chunks [--all]
 
-Without --all only chunks with no embedding or a different embedding model are processed.
+Without --all only rows with no embedding or a different embedding model are processed.
 """
 import sys
 from sqlalchemy import select, or_
@@ -28,6 +29,11 @@ def run(all_chunks=False, batch=256):
                 print(f"Embedding stopped: {status}")
                 return 1
     print(f"Embedded {total} chunk(s) with {embedding_key()}.")
+    from engine.memory import embed_case
+    with db.Session.begin() as session:
+        cases = [c for c in session.scalars(select(db.Case)) if all_chunks or c.embedding is None or c.embedding_model != embedding_key()]
+        done = sum(embed_case(c) for c in cases)
+    print(f"Embedded {done} case summary(ies).")
     return 0
 
 

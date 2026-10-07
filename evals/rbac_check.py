@@ -26,6 +26,7 @@ def run():
         for role in roles:
             u=db.User(id='matrix-'+role,email='matrix-'+role+'@demo.local',role=role,password_hash=hashed,active=True,token_version=0);s.add(u);s.flush();users[role]=u;tokens[role]=issue_token(u)
             for action in ('approve','reject'):s.add(db.Case(case_id=action+'-'+role,status='proposed',proposer_id='matrix-admin',data={'label':'matrix proposal'}))
+            s.add(db.Case(case_id='retire-'+role,status='approved',data={'label':'matrix approved','confirmed_category':'material','summary':'matrix','version':1}))
         s.add(db.User(id='matrix-target',email='matrix-target@demo.local',role='viewer',password_hash=hashed,active=True,token_version=0))
         s.flush()
         # Exercise create on an existing canonical identity, without inventing a machine.
@@ -37,7 +38,7 @@ def run():
     run_id=initial.json()['run_id']
     machine=client.get('/api/machines/LINE-A/IMM-01',headers=admin).json()
     csv=(config.INCIDENTS_DIR/'incident_001.csv').read_bytes()
-    case={'incident_id':'INC-001','rca_draft':'draft','confirmed_category':'machine','confirmed_subcause':'cooling','fix_applied':'Inspected cooling circuit'}
+    case={'incident_id':'INC-001','rca_draft':'draft','confirmed_category':'machine','confirmed_subcause':'cooling','fix_applied':'Inspected cooling circuit','duplicate_reason':'RBAC matrix probe'}
     first=client.post('/api/incidents/INC-001/drafts',headers=admin,json={'content':'Matrix draft.','run_id':run_id})
     assert first.status_code==201,first.text
     machine_doc=client.post('/api/documents/upload',headers=admin,data={'title':'Matrix machine guide','doc_type':'manual','scope':'machine','targets':'["LINE-A/IMM-01"]'},
@@ -55,6 +56,8 @@ def run():
       ('GET','/api/incidents/INC-001/drafts/1/export?format=pdf','view',{}),('POST','/api/incidents/INC-001/drafts','draft',{'json':{'content':'Edited draft.'}}),
       ('POST','/api/incidents/INC-001/drafts/1/restore','draft',{}),('GET','/api/dashboard','view',{}),('GET','/api/nav/counts','view',{}),('GET','/api/llm/status','view',{}),
       ('POST','/api/cases','propose',{'json':case}),('POST','/api/cases/propose','propose',{'json':case}),('POST','/api/cases/approve-{role}/approve','approve',{}),('POST','/api/cases/reject-{role}/reject','approve',{}),
+      ('POST','/api/cases/draft','propose',{'json':{'incident_id':'INC-001'}}),('GET','/api/cases/INC-H01','view',{}),('GET','/api/cases/INC-H01/history','view',{}),
+      ('PATCH','/api/cases/INC-H01','approve',{'json':{'reason':'RBAC matrix probe','lessons':'probe'}}),('POST','/api/cases/retire-{role}/retire','approve',{'json':{'reason':'RBAC matrix probe'}}),
       ('POST','/api/evals/run','evals',{}),('POST','/api/users','users',{'json':{'email':'created@demo.local','password':password,'role':'viewer'}}),('PATCH','/api/users/matrix-target','users',{'json':{'active':True}}),
       ('POST','/api/auth/logout','view',{})]
     details=[]

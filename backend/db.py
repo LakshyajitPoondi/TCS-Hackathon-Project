@@ -130,6 +130,21 @@ class Case(Base):
     approver_id = Column(String, ForeignKey("users.id"), nullable=True)
     created_at = Column(UTCDateTime, default=now)
     data = Column(JSONType, nullable=False)
+    embedding = Column(EmbeddingType, nullable=True)      # summary embedding, vector(384) on Postgres
+    embedding_model = Column(String, nullable=True)
+
+class CaseVersion(Base):
+    """Snapshot of a case before every edit or retirement (approved cases stay auditable)."""
+    __tablename__ = "case_versions"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    case_id = Column(String, ForeignKey("cases.case_id", ondelete="CASCADE"), nullable=False, index=True)
+    version = Column(Integer, nullable=False)
+    status = Column(String, nullable=False)
+    data = Column(JSONType, nullable=False)
+    change = Column(String, nullable=False)       # edit | retire
+    reason = Column(Text, nullable=True)
+    editor_id = Column(String, ForeignKey("users.id"), nullable=True)
+    created_at = Column(UTCDateTime, default=now)
 
 class AnalysisRun(Base):
     __tablename__ = "analysis_runs"

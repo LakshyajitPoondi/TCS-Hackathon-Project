@@ -3,9 +3,12 @@ export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localh
 /** Error with a human-readable message and the HTTP status (0 = network failure). */
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** Parsed FastAPI `detail` (string, validation list or structured object such as duplicate warnings). */
+  detail: unknown;
+  constructor(message: string, status: number, detail: unknown = null) {
     super(message);
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -19,6 +22,7 @@ const STATUS_MESSAGES: Record<number, string> = {
 /** Turn FastAPI's {"detail": ...} (string or validation list) into one readable line. */
 function readableDetail(detail: unknown): string | null {
   if (typeof detail === "string") return detail;
+  if (detail && typeof detail === "object" && "message" in detail) return String((detail as { message: unknown }).message);
   if (Array.isArray(detail)) {
     const msgs = detail
       .map((d) => (d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : null))
@@ -44,13 +48,15 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       sessionStorage.removeItem('rca_token');window.dispatchEvent(new Event('rca-auth-expired'));
     }
     let message: string | null = null;
+    let detail: unknown = null;
     try {
-      message = readableDetail((await res.json())?.detail);
+      detail = (await res.json())?.detail;
+      message = readableDetail(detail);
     } catch {
       /* non-JSON body: fall back to the status message */
     }
     if (res.status >= 500 && res.status !== 501) message = STATUS_MESSAGES[500];
-    throw new ApiError(message || STATUS_MESSAGES[res.status] || `Request failed (${res.status}).`, res.status);
+    throw new ApiError(message || STATUS_MESSAGES[res.status] || `Request failed (${res.status}).`, res.status, detail);
   }
   return (await res.json()) as T;
 }

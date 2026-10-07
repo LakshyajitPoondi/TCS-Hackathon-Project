@@ -70,6 +70,11 @@ def init_db():
                 item = {**item, 'machine_uid':item['line']+'/'+item['machine'], 'model':'IMM',
                         "label":"synthetic seed", "summary":f"Synthetic seed {item['confirmed_category']} case.", "fix_applied":"Synthetic fixture; no actual repair performed."}
                 session.add(db.Case(case_id=item["case_id"], status="approved", data=item))
+        session.flush()
+        from engine.memory import embed_case
+        from sqlalchemy import select
+        for case in session.scalars(select(db.Case).where(db.Case.embedding.is_(None), db.Case.status.in_(("approved", "proposed")))):
+            embed_case(case)
     from backend.auth import seed_users
     seed_users()
 

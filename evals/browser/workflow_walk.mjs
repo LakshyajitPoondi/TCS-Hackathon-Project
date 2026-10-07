@@ -172,12 +172,45 @@ await step('6 engineer: similar incident recalls approved case', async () => {
   const { ctx, page } = await session('engineer@demo.local');
   await nav(page, 'Incidents');
   await page.getByRole('row', { name: /INC-009/ }).click();
-  await page.getByRole('button', { name: /run rca analysis/i }).click();
+  await Promise.all([page.waitForResponse((r) => r.url().endsWith('/analyze') && r.request().method() === 'POST', { timeout: 120000 }),
+                     page.getByRole('button', { name: /run rca analysis/i }).click()]);
   await page.getByRole('heading', { name: 'Ranked hypotheses' }).waitFor({ timeout: 90000 });
+  await page.waitForTimeout(500);
   const similar = await page.locator('section', { hasText: 'Similar Past Cases' }).first().innerText();
   await ctx.close();
   if (!similar.includes('CASE-') && !similar.toLowerCase().includes('qa-approved')) throw new Error('approved case not recalled');
   return 'recalled';
+});
+
+// 6b. QA lead: edit the approved case (new version kept), then retire it; it is no longer recalled.
+await step('6b qa: edit approved case, retire, not recalled', async () => {
+  const { ctx, page } = await session('qa@demo.local');
+  await nav(page, 'Cases');
+  await page.getByLabel('Case status').selectOption('approved');
+  await page.locator('a[href^="/cases/CASE-"]').first().click();
+  await page.getByRole('button', { name: 'Edit approved case' }).click();
+  await page.getByLabel('Lessons learned').fill('Check chiller filter at every PM and log the pressure drop.');
+  await page.getByLabel('Reason *').fill('Add the pressure-drop check');
+  await page.getByRole('button', { name: 'Save new version' }).click();
+  await page.getByText(/Case · version 2/).waitFor();
+  await page.getByText(/Version 1 \(approved\)/).waitFor();
+  const caseId = (await page.locator('h1').innerText()).trim();
+  await page.getByRole('button', { name: 'Retire case' }).first().click();
+  await page.getByLabel('Reason *').fill('Superseded by new chiller design');
+  await page.getByRole('button', { name: 'Retire case' }).last().click();
+  await page.getByText('This case is never recalled.', { exact: false }).waitFor();
+  await ctx.close();
+  const eng = await session('engineer@demo.local');
+  await nav(eng.page, 'Incidents');
+  await eng.page.getByRole('row', { name: /INC-009/ }).click();
+  await eng.page.getByText('Analysis complete').waitFor({ timeout: 90000 });
+  await Promise.all([eng.page.waitForResponse((r) => r.url().endsWith('/analyze') && r.request().method() === 'POST', { timeout: 120000 }),
+                     eng.page.getByRole('button', { name: /re-run rca analysis/i }).click()]);
+  await eng.page.waitForTimeout(500);
+  const similar = await eng.page.locator('section', { hasText: 'Similar Past Cases' }).first().innerText();
+  await eng.ctx.close();
+  if (similar.includes(caseId)) throw new Error('retired case still recalled');
+  return caseId + ' retired';
 });
 
 // 7. QA lead: run evaluations.

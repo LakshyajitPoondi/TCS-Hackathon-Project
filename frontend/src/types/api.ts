@@ -156,6 +156,11 @@ export interface SaveCaseRequest {
   confirmed_category: Category;
   confirmed_subcause: Subcause;
   notes: string | null;
+  summary?: string;
+  symptoms?: string[];
+  evidence_summary?: string;
+  text_source?: "llm" | "template";
+  duplicate_reason?: string | null;
 }
 
 export interface SaveCaseResponse {

@@ -172,6 +172,12 @@ class SaveCaseRequest(BaseModel):
     confirmed_category: Category
     confirmed_subcause: Subcause = None
     notes: str | None = None
+    # Memory-agent fields, edited by the engineer before submit (engineer-entered facts are authoritative).
+    summary: str | None = Field(default=None, max_length=4000)
+    symptoms: list[str] | None = Field(default=None, max_length=20)
+    evidence_summary: str | None = Field(default=None, max_length=4000)
+    text_source: Literal['llm', 'template'] = 'template'
+    duplicate_reason: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
     def _check_subcause(self) -> "SaveCaseRequest":
