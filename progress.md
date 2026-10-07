@@ -2,12 +2,13 @@
 
 ## v2 build (branch feature/v2, from main c58eed5)
 Prompt: v2 stages 0–9 (see audit_report_v2.md for bug IDs B1–B20). Each stage ends with checks, this file, and a commit "v2 stage N: …".
-**Next unfinished stage: 9.**
+**All stages (0–9) complete.** Final report: build_report.md. Nothing is merged into main or pushed.
 
 ### Live LLM call counter (budget 10 for the whole build)
-Used: 4 of 10.
+Used: 6 of 10.
 1–2. Stage 2 `python -m evals.live_llm_check --max-calls 2` (gemini-3.8-flash, key passed in memory from GROQ_API_KEY because .env has LLM_API_KEY empty): both requests were the agent-plan call, both HTTP 503 "overloaded" (5.1 s, 1.0 s). Per-analysis budget then stopped further calls; template wording used; grounding passed. Live LLM wording/plan: **Unverified (provider 503)**. Quota was not hit (no 429).
 3–4. Stage 8, same command: again both requests were the agent-plan call, HTTP 503 (18.4 s, 15.2 s). Template wording, grounding passed. **Unverified (provider 503)**. Follow-up D8.2: the plan call no longer retries 503, so a later attempt reaches the wording call.
+5–6. Stage 9, `--agent-mode deterministic` (wording only): HTTP 503 (2.1 s), then ReadTimeout at 60 s. Template wording, grounding passed. **Unverified (provider 503 / timeout)**. Stopped there; 4 requests unused.
 
 ### v2 decisions (made by the agent)
 - D0.1 `.env` does not match the brief: LLM_PROVIDER=openai_compatible, LLM_API_KEY empty (the key sits in GROQ_API_KEY), JWT_SECRET / SEED_ADMIN_* / DEMO_PASSWORD empty. `.env` is never written by the agent. After B1 the key in GROQ_API_KEY is only read for provider=groq, so the owner must move it to LLM_API_KEY and set LLM_PROVIDER=gemini. A warning is logged at start-up when this mismatch is detected (no key printed).
@@ -49,6 +50,14 @@ Used: 4 of 10.
 - D1.7 Code defaults changed to DATABASE_URL=postgresql+psycopg://rca:rca@localhost:5433/rca and EMBEDDINGS_PROVIDER=fastembed. The owner's .env still says sqlite + none, so the owner must change those two lines to use Postgres/pgvector.
 
 ### v2 stage log
+#### Stage 9 complete
+- Fresh Docker volume (`docker compose down -v` + `up -d`): pgvector 0.8.7 from the init script; `alembic upgrade head` → 0005; `init_db` (9 machines, 8 SOPs, 32 chunks embedded with fastembed, 12 seed cases embedded, 64 incidents = 18 samples + 46 old uploads found in data/uploads); `migrate_sqlite` from data/app.db (copied 3 eval runs + 27 results, other rows already seeded); second copy inserted 0; `embed_chunks` had nothing left.
+- pytest: SQLite 84 passed + 1 skipped; Postgres 85 passed. Ranking 16/16, 16/16, 2/2 (+ ambiguous 3/3).
+- Eval run on Postgres + fastembed (stored, run 4a27c773…): every metric passes; hybrid pgvector recall@4 1.0, MRR 1.0, leaks 0; only the optional LLM judge is Unverified.
+- Headless: workflow walk 9/9 (admin, engineer, QA lead, viewer; in-app eval run 42 metrics pass), login + robot 31/31, cause graph ranked + abstain, audit filter.
+- Live LLM: requests 5–6 (see counter), Unverified.
+- build_report.md written (what was built, results, live calls, env table with required .env changes, commands, decisions, open questions, commits).
+
 #### Stage 8 complete
 - Retrieval suite: lexical (Postgres FTS) recall@k 0.852 / MRR 1.0 / leaks 0 / filtered-out 1.0; hybrid real-embedding benchmark on **postgres+pgvector** (fastembed BAAI/bge-small-en-v1.5, 75 chunks re-embedded with the real model first): recall@4 **1.0**, MRR **1.0**, wrong-machine leaks **0**, filtered-out correctness **1.0**.
 - New suites: Workflow and drafts (status sequence new→analysed→draft_saved→case_proposed→case_approved + rejected branch = 1.0; versions/restore/MD+PDF export/viewer read-only = 1.0); Memory agent (summary fields template + fake LLM 1.0, duplicate detection 1.0, retired never recalled 1.0, semantic recall 1.0, edit versioning 1.0). RBAC matrix 1.0 over 57 endpoint/method pairs. LLM layer: schema/fallback 1.0, quota/budget fallback 1.0.
