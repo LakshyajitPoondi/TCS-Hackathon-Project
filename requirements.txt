@@ -14,3 +14,8 @@ pypdf==6.19.0
 fastembed==0.8.1
 bcrypt==5.0.0
 python-docx==1.2.0
+psycopg[binary]==3.3.6
+alembic==1.20.0
+pgvector==0.5.0
+fpdf2==2.8.9
+PyYAML==6.0.3

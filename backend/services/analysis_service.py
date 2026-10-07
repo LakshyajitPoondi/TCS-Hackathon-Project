@@ -82,13 +82,12 @@ def _template_draft(incident_id: str, evidence: dict, hyps: list[dict], steps: d
               "Missing verification:"]
     lines += [f"- {m}" for m in top["missing_checks"]]
     lines += ["", "Verification actions:"]
-    lines += [f"- {s['step']} ({s['source']}, {s.get('chunk_id', '')})" for s in steps[top["rank"]]]
+    lines += [retrieval.draft_line(s) for s in steps[top["rank"]]]
     lines += ["", WARNING]
     return "\n".join(lines)
 
 
-def _abstain_draft(incident_id: str, evidence: dict, scored: dict) -> str:
-    sops = []
+def _abstain_draft(incident_id: str, evidence: dict, scored: dict, steps: list[dict]) -> str:
     lines = [f"RCA draft: {incident_id}", "", "Status: Insufficient evidence - additional verification required.", "",
              "Incident summary:", _summary_line(evidence) if evidence.get("kpis") else "No KPIs available."]
     reason = evidence.get("reason") or scored.get("abstain_reason")
@@ -98,7 +97,8 @@ def _abstain_draft(incident_id: str, evidence: dict, scored: dict) -> str:
     if observed:
         lines += ["", "Observed (none sufficient on its own):"] + [f"- {o}" for o in observed]
     lines += ["", "Suggested checks:"]
-    lines += [f"- {st} ({s['id']} {s['title']})" for s in sops if s for st in s["steps"][:TEMPLATE_STEPS_PER_SOP]]
+    # B19: suggested checks come from the in-scope retrieved procedures.
+    lines += [retrieval.draft_line(s) for s in steps] or ["- No in-scope procedure was retrieved; follow plant triage."]
     lines += ["", WARNING]
     return "\n".join(lines)
 
@@ -144,9 +144,8 @@ def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, 
     investigation,trace=investigate(incident_id,line,machines,evidence,hyps,signature,rag_results,context)
 
     if not hyps:
-        draft = _abstain_draft(incident_id, evidence, scored)
         steps=retrieval.verification_steps(rag_results[0]['hits'])
-        draft=draft.replace(WARNING,'')+'\n'+ '\n'.join(s['step'] for s in steps)+'\n'+WARNING
+        draft = _abstain_draft(incident_id, evidence, scored, steps)
         final = {"hypotheses": [], "rca_draft": draft}
         observed=[e for c in CATEGORIES for e in scored['category_evidence'][c]['supporting']]
         grounding,_=check_detailed(final,{'scoring_policy':{'minimum_score':MIN_SCORE},'kpis':evidence.get('kpis',{}),'observed_evidence':observed,'chunks':rag_results[0]['hits']},{})

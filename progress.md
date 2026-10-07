@@ -2,7 +2,7 @@
 
 ## v2 build (branch feature/v2, from main c58eed5)
 Prompt: v2 stages 0–9 (see audit_report_v2.md for bug IDs B1–B20). Each stage ends with checks, this file, and a commit "v2 stage N: …".
-**Next unfinished stage: 1.**
+**Next unfinished stage: 2.**
 
 ### Live LLM call counter (budget 10 for the whole build)
 Used: 0.
@@ -11,8 +11,25 @@ Used: 0.
 - D0.1 `.env` does not match the brief: LLM_PROVIDER=openai_compatible, LLM_API_KEY empty (the key sits in GROQ_API_KEY), JWT_SECRET / SEED_ADMIN_* / DEMO_PASSWORD empty. `.env` is never written by the agent. After B1 the key in GROQ_API_KEY is only read for provider=groq, so the owner must move it to LLM_API_KEY and set LLM_PROVIDER=gemini. A warning is logged at start-up when this mismatch is detected (no key printed).
 - D0.2 Generated eval fixtures (data/eval_docs/*, evals/docs_answer_key.json) were removed from git and are now produced in a temp folder per run; the key is passed in memory. Their content is deterministic, so nothing is lost.
 - D0.3 Uploaded documents path is configurable (DOCUMENTS_DIR, default data/documents). Tests and the eval worker point it at temp folders.
+- D1.1 Lexical search: Postgres full-text search (generated `tsv` column, GIN index, `ts_rank`, OR-query of the same tokens BM25 used); SQLite keeps BM25 over in-scope chunks (tests/dev only). Vector search: `embedding <=> query` ORDER BY … LIMIT in SQL with `hnsw.iterative_scan = strict_order` so the machine filter never starves the HNSW result. Fusion: reciprocal rank fusion (k=60) of the two candidate lists; ties broken by scope priority machine > model > line > plant.
+- D1.2 Scope filter in SQL uses `document_machine_links` (kept in sync by `put_links`) joined to active documents. `create_machine` now rebuilds links too (it did not before, so a re-created machine lost plant SOPs).
+- D1.3 Search is read-only: chunks are embedded on upload (active docs), on confirm/activation, or by `python -m backend.embed_chunks [--all]`.
+- D1.4 Verification steps: numbered steps from all hits are preferred; a raw "Review reference" is used only if no hit has numbered steps; drafts cite such references by doc/chunk ID instead of quoting their prose (the quoted SOP text "motor current rose" made the INC-009 template draft fail grounding under the FTS ranking). Also fixes B4 (step = first sentence only) and B19 (abstain draft "Suggested checks" now lists the retrieved steps).
+- D1.5 Schema bootstrap: Postgres → `alembic upgrade head` (a v1 DB without alembic_version is stamped 0001 first); SQLite → `create_all`. `DB_BOOTSTRAP=create_all|migrate` overrides. On SQLite migration 0002 only normalises ISO timestamp text (a batch rebuild would CAST it to a number).
+- D1.6 Tests: `pytest --db sqlite|postgres` (or TEST_DB). Postgres tests use database rca_test (auto-created, never the app DB) with a throwaway schema per test; eval workers follow EVAL_DB.
+- D1.7 Code defaults changed to DATABASE_URL=postgresql+psycopg://rca:rca@localhost:5433/rca and EMBEDDINGS_PROVIDER=fastembed. The owner's .env still says sqlite + none, so the owner must change those two lines to use Postgres/pgvector.
 
 ### v2 stage log
+#### Stage 1 complete
+- docker-compose.yml: pgvector/pgvector:pg18 (Postgres 18.6, pgvector 0.8.7), host port 5433, named volume rca_pgdata, pg_isready healthcheck, init SQL `CREATE EXTENSION IF NOT EXISTS vector`. Docker Desktop had to be started; the native PG18 on 5432 was not touched.
+- Added pinned psycopg[binary] 3.3.6, alembic 1.20.0, pgvector 0.5.0 (+ fpdf2 2.8.9, PyYAML 6.0.3 for later stages).
+- Alembic: 0001 = v1 schema exactly; 0002 = timestamptz (B14), JSONB, vector(384) + HNSW cosine index, tsvector + GIN.
+- Retrieval rewritten (B13): SQL scope filter first, then SQL FTS + SQL vector search, RRF. Only candidate chunks are loaded.
+- `python -m backend.migrate_sqlite` (idempotent, ON CONFLICT DO NOTHING, sequences reset) and `python -m backend.embed_chunks`.
+- Verified: `alembic upgrade head` on an empty Postgres DB; data copy from the real data/app.db copy (9 machines, 8 docs, 32 chunks, 12 cases, 3 eval runs, 27 eval results) — second and third runs inserted 0; fastembed embedded 32 chunks (384 dims) in ~3 s.
+- Tests: SQLite 44 passed + 1 skipped (Postgres-only copy test); Postgres 45 passed. New tests: upgrade on empty DB + no drift vs models, v1 adoption with timestamp conversion, SQLite→Postgres copy idempotency.
+- Evals on Postgres with real fastembed: all suites pass. Retrieval: hybrid (pgvector) recall@4 1.0, wrong-machine leaks 0; lexical-only (Postgres FTS) recall@4 0.852, MRR 1.0, leaks 0. Ranking 16/16, 16/16, 2/2, ambiguous 3/3.
+
 #### Stage 0 complete
 - main already contains stage 0–11 work (merge c58eed5). No processes were listening on 8001/5173/5174 (nothing to stop). Created feature/v2.
 - B1: `resolve_llm_key` — LLM_API_KEY for every provider; GROQ_API_KEY only when provider=groq and LLM_API_KEY empty/blank. Logs the source variable name only.

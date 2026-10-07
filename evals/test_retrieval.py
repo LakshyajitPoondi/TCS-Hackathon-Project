@@ -1,3 +1,4 @@
+from sqlalchemy import select
 from backend import db
 from backend.core import config
 from backend.services.documents import ingest
@@ -13,7 +14,9 @@ def test_hard_scope_active_and_citations(client,monkeypatch):
     assert 'LINE-A-IMM-01' in ids and 'LINE-B-IMM-01' not in ids and pending.doc_id not in ids
     assert any(f['doc_id']=='LINE-B-IMM-01' for f in result['filtered'])
     monkeypatch.setattr(config,'EMBEDDINGS_PROVIDER','openai_compatible')
-    monkeypatch.setattr(retrieval,'embed',lambda texts:[[1.,len(t)%7+1.] for t in texts])
+    monkeypatch.setattr(retrieval,'embed',lambda texts:[[1.,len(t)%7+1.]+[0.]*(db.EMBEDDING_DIM-2) for t in texts])
+    with db.Session.begin() as s:
+        assert retrieval.embed_chunks(list(s.scalars(select(db.DocumentChunk))))[1]=='enabled'
     result=retrieval.search('LINE-A/IMM-01','cooling temperature vibration',20)
     assert result['embedding_status']=='enabled' and all(h['doc_id']!='LINE-B-IMM-01' for h in result['hits'])
     with db.Session() as s:assert s.get(db.DocumentChunk,result['hits'][0]['chunk_id']).embedding

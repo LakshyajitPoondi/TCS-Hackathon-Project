@@ -109,8 +109,18 @@ def ingest(session,filename,content,title,doc_type,version,scope,targets,user_id
     config.DOCUMENTS_DIR.mkdir(parents=True,exist_ok=True)
     path=config.DOCUMENTS_DIR/(uuid.uuid4().hex+Path(filename).suffix.lower());path.write_bytes(content)
     doc=db.Document(doc_id=doc_id,title=title.strip(),doc_type=doc_type,version=version,scope=scope,targets=targets,status='pending_mapping' if detection['ambiguous'] or detection['conflict'] else 'active',uploaded_by=user_id,detection=detection,storage_path=str(path))
-    session.add(doc);session.flush();session.add_all(make_chunks(doc_id,version,parts));put_links(session,doc,machines)
+    chunks=make_chunks(doc_id,version,parts)
+    session.add(doc);session.flush();session.add_all(chunks);put_links(session,doc,machines)
+    if doc.status=='active':
+        from engine.retrieval import embed_chunks
+        embed_chunks(chunks)
     return doc
+
+def embed_missing(session,doc_id):
+    """Embed a document's chunks that lack a current embedding (called on activation)."""
+    from engine.retrieval import embed_chunks,embedding_key
+    chunks=[c for c in session.scalars(select(db.DocumentChunk).where(db.DocumentChunk.doc_id==doc_id)) if c.embedding is None or c.embedding_model!=embedding_key()]
+    return embed_chunks(chunks)
 
 def serialize(doc):
     return {name:getattr(doc,name) for name in ('doc_id','title','doc_type','version','scope','targets','status','uploaded_by','uploaded_at','detection')}

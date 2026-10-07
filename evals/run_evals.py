@@ -31,21 +31,22 @@ def settings(**values):
     finally:
         for k,v in old.items():setattr(config,k,v)
 
-def child_env(path):
+def child_env(url):
     env=os.environ.copy()
-    env.update(DATABASE_URL='sqlite:///'+str(path.resolve()),JWT_SECRET=secrets.token_urlsafe(48),SEED_ADMIN_EMAIL='',SEED_ADMIN_PASSWORD='',DEMO_USERS_ENABLED='false',LLM_ENABLED='false',EMBEDDINGS_PROVIDER='none',AGENT_ENABLED='false')
+    env.update(DATABASE_URL=url,DB_BOOTSTRAP='migrate',JWT_SECRET=secrets.token_urlsafe(48),SEED_ADMIN_EMAIL='',SEED_ADMIN_PASSWORD='',DEMO_USERS_ENABLED='false',LLM_ENABLED='false',EMBEDDINGS_PROVIDER='none',AGENT_ENABLED='false')
     return env
 def subprocess_result(module,**options):
+    """Run an evaluation worker against a scratch database (EVAL_DB=sqlite|postgres)."""
+    from evals.dbutil import scratch_database
     directory=config.ROOT_DIR/'.cache';directory.mkdir(exist_ok=True)
-    path=directory/(module.rsplit('.',1)[-1]+'-'+uuid.uuid4().hex+'.db')
     docs=tempfile.mkdtemp(prefix='rca-eval-documents-')
-    env=child_env(path);env.update(DOCUMENTS_DIR=docs,**options)
     try:
-        result=subprocess.run([sys.executable,'-m',module,'--worker'],cwd=config.ROOT_DIR,env=env,capture_output=True,text=True,encoding='utf-8',timeout=180)
-        if result.returncode:raise RuntimeError('Evaluation worker failed: '+result.stderr[-2000:])
-        return json.loads(result.stdout.splitlines()[-1])
+        with scratch_database(os.getenv('EVAL_DB','sqlite'),directory) as url:
+            env=child_env(url);env.update(DOCUMENTS_DIR=docs,**options)
+            result=subprocess.run([sys.executable,'-m',module,'--worker'],cwd=config.ROOT_DIR,env=env,capture_output=True,text=True,encoding='utf-8',timeout=600)
+            if result.returncode:raise RuntimeError('Evaluation worker failed: '+result.stderr[-2000:])
+            return json.loads(result.stdout.splitlines()[-1])
     finally:
-        if path.exists():path.unlink()
         shutil.rmtree(docs,ignore_errors=True)
 
 class JudgeRatings(BaseModel):
@@ -137,11 +138,12 @@ def run_worker():
         import hashlib
         out=[]
         for text in texts:
-            v=np.zeros(32)
-            for word in text.lower().split():v[int(hashlib.sha256(word.encode()).hexdigest()[:8],16)%32]+=1
+            v=np.zeros(db.EMBEDDING_DIM)
+            for word in text.lower().split():v[int(hashlib.sha256(word.encode()).hexdigest()[:8],16)%db.EMBEDDING_DIM]+=1
             out.append(v.tolist())
         return out
     with settings(EMBEDDINGS_PROVIDER='openai_compatible'),patch.object(retrieval,'embed',side_effect=mock_embed):
+        with db.Session.begin() as s:retrieval.embed_chunks(list(s.scalars(select(db.DocumentChunk))))
         fused=retrieval.search('LINE-A/IMM-01','coolant flow vibration manual',20)
         with db.Session() as s:
             fusion_leaks=sum(not machine_allowed(s.get(db.Machine,'LINE-A/IMM-01'),s.get(db.Document,hit['doc_id']).scope,s.get(db.Document,hit['doc_id']).targets) for hit in fused['hits'])
@@ -199,5 +201,5 @@ if __name__=='__main__':
     if '--worker' in sys.argv:print(json.dumps(run_worker()))
     else:
         from backend.init_db import init_db
-        init_db();result=persist(compute());print(json.dumps(result,indent=2))
+        init_db();result=persist(compute());print(json.dumps(result,indent=2,default=str))
         if any(m['passed'] is False for s in result['suites'] for m in s['metrics']):sys.exit(1)

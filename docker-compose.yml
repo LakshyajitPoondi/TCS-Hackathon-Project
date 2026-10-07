@@ -1,0 +1,24 @@
+# Postgres 18 + pgvector for the RCA app. Host port 5433 (5432 is used by a native PostgreSQL install).
+# Local development credentials only (rca/rca); change them for any shared deployment.
+services:
+  db:
+    image: pgvector/pgvector:pg18
+    container_name: rca-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rca
+      POSTGRES_PASSWORD: rca
+      POSTGRES_DB: rca
+    ports:
+      - "5433:5432"
+    volumes:
+      - rca_pgdata:/var/lib/postgresql
+      - ./docker/init-pgvector.sql:/docker-entrypoint-initdb.d/01-pgvector.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rca -d rca"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  rca_pgdata:

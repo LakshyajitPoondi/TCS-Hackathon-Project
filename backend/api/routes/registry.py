@@ -42,7 +42,9 @@ def create_machine(body:MachineBody,user=Depends(require('machines'))):
     validate_machine(body)
     with db.Session.begin() as s:
         if s.get(db.Machine,body.machine_uid):raise HTTPException(409,'Machine already exists')
-        m=db.Machine(machine_uid=body.machine_uid,short_name=body.short_name,line=body.line,model=body.model,data=body.model_dump(exclude={'machine_uid','short_name','line','model'}));s.add(m)
+        m=db.Machine(machine_uid=body.machine_uid,short_name=body.short_name,line=body.line,model=body.model,data=body.model_dump(exclude={'machine_uid','short_name','line','model'}));s.add(m);s.flush()
+        ms=list(s.scalars(select(db.Machine)))
+        for doc in s.scalars(select(db.Document)):documents.put_links(s,doc,ms)
         db.audit(s,user.id,'create_machine',body.model_dump());return machines.serialize(m)
 
 @router.get('/machines/{machine_uid:path}/documents')
@@ -119,7 +121,8 @@ def confirm_doc(doc_id:str,body:Mapping,user=Depends(require('documents'))):
         ms=list(s.scalars(select(db.Machine)));documents.validate_mapping(body.scope,body.targets,ms)
         d.scope=body.scope;d.targets=body.targets;d.status='active'
         d.detection={**d.detection,'confirmed_by':user.id}
-        documents.put_links(s,d,ms);db.audit(s,user.id,'confirm_document',{'doc_id':doc_id,'scope':body.scope,'targets':body.targets});return documents.serialize(d)
+        documents.put_links(s,d,ms);documents.embed_missing(s,doc_id)
+        db.audit(s,user.id,'confirm_document',{'doc_id':doc_id,'scope':body.scope,'targets':body.targets});return documents.serialize(d)
 
 @router.patch('/documents/{doc_id}')
 def edit_doc(doc_id:str,body:Mapping,user=Depends(require('documents'))):
