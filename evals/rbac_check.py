@@ -38,13 +38,22 @@ def run():
     machine=client.get('/api/machines/LINE-A/IMM-01',headers=admin).json()
     csv=(config.INCIDENTS_DIR/'incident_001.csv').read_bytes()
     case={'incident_id':'INC-001','rca_draft':'draft','confirmed_category':'machine','confirmed_subcause':'cooling','fix_applied':'Inspected cooling circuit'}
+    first=client.post('/api/incidents/INC-001/drafts',headers=admin,json={'content':'Matrix draft.','run_id':run_id})
+    assert first.status_code==201,first.text
+    machine_doc=client.post('/api/documents/upload',headers=admin,data={'title':'Matrix machine guide','doc_type':'manual','scope':'machine','targets':'["LINE-A/IMM-01"]'},
+                            files={'file':('LINE-A_IMM-01_guide.txt',b'LINE-A/IMM-01 inspect coolant flow.')}).json()['doc_id']
+    mapping={'scope':'machine','targets':['LINE-A/IMM-01']}
     entries=[('GET','/','view',{}),('GET','/api/auth/me','view',{}),('GET','/api/incidents','view',{}),('GET','/api/incidents/INC-001','view',{}),('GET','/api/incidents/INC-001/signals','view',{}),
       ('GET','/api/machines','view',{}),('GET','/api/machines/LINE-A/IMM-01','view',{}),('GET','/api/machines/LINE-A/IMM-01/documents','view',{}),('GET','/api/machines/LINE-A/IMM-01/incidents','view',{}),
       ('GET','/api/documents','view',{}),('GET','/api/documents/SOP-007','view',{}),('GET','/api/sops/SOP-007','view',{}),('GET','/api/cases','view',{}),('GET','/api/analyses','view',{}),('GET','/api/analyses/'+run_id,'view',{}),('GET','/api/analyses/'+run_id+'/trace','view',{}),('GET','/api/evals','view',{}),('GET','/api/users','users',{}),
       ('POST','/api/incidents/INC-001/analyze','analyze',{}),('POST','/api/incidents/upload','upload',{'files':{'file':('incident.csv',csv)}}),
       ('POST','/api/machines','machines',{'json':{**machine,'machine_uid':'LINE-C/IMM-03','short_name':'IMM-03','line':'LINE-C'}}),('PATCH','/api/machines/LINE-A/IMM-01','machines',{'json':machine}),
       ('POST','/api/documents/upload','documents',{'data':{'title':'Matrix guide','doc_type':'manual','scope':'plant'},'files':{'file':('guide.txt',b'Inspect coolant flow.')}}),
-      ('PATCH','/api/documents/SOP-007','documents',{'json':{'scope':'plant','targets':[],'status':'pending_mapping'}}),('POST','/api/documents/SOP-007/confirm','documents',{'json':{'scope':'plant','targets':[]}}),
+      ('PATCH','/api/documents/SOP-007','plant_documents',{'json':{'scope':'plant','targets':[],'status':'pending_mapping'}}),('POST','/api/documents/SOP-007/confirm','plant_documents',{'json':{'scope':'plant','targets':[]}}),
+      ('PATCH','/api/documents/'+machine_doc,'documents',{'json':{**mapping,'status':'pending_mapping'}}),('POST','/api/documents/'+machine_doc+'/confirm','documents',{'json':mapping}),
+      ('GET','/api/incidents/INC-001/workflow','view',{}),('GET','/api/incidents/INC-001/drafts','view',{}),('GET','/api/incidents/INC-001/drafts/1/export?format=md','view',{}),
+      ('GET','/api/incidents/INC-001/drafts/1/export?format=pdf','view',{}),('POST','/api/incidents/INC-001/drafts','draft',{'json':{'content':'Edited draft.'}}),
+      ('POST','/api/incidents/INC-001/drafts/1/restore','draft',{}),('GET','/api/dashboard','view',{}),('GET','/api/nav/counts','view',{}),('GET','/api/llm/status','view',{}),
       ('POST','/api/cases','propose',{'json':case}),('POST','/api/cases/propose','propose',{'json':case}),('POST','/api/cases/approve-{role}/approve','approve',{}),('POST','/api/cases/reject-{role}/reject','approve',{}),
       ('POST','/api/evals/run','evals',{}),('POST','/api/users','users',{'json':{'email':'created@demo.local','password':password,'role':'viewer'}}),('PATCH','/api/users/matrix-target','users',{'json':{'active':True}}),
       ('POST','/api/auth/logout','view',{})]

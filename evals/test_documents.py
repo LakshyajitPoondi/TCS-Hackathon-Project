@@ -9,7 +9,7 @@ def test_registry_seed(client):
     assert rows[0]['machine_uid']=='LINE-A/IMM-01'
     assert 'normal_ranges' in rows[0]
     assert len(client.get('/api/machines/LINE-A/IMM-01/documents').json())==8
-    assert len(client.get('/api/machines/LINE-A/IMM-01/incidents').json())==6
+    assert 0<len(client.get('/api/machines/LINE-A/IMM-01/incidents').json())<6   # B12: affected machine only
     assert client.get('/api/machines/LINE-A/IMM-01').status_code==200
 
 def upload(client,text,scope='machine',targets='["LINE-A/IMM-01"]',filename='guide.md'):

@@ -2,9 +2,9 @@ import { createContext,useContext,useEffect,useState,type ReactNode } from 'reac
 import { Navigate,Outlet } from 'react-router-dom';
 import { request } from './api/client';
 export type Role='admin'|'engineer'|'qa_lead'|'viewer';
-export interface User {id:string;email:string;role:Role;active:boolean}
-type Action='analyze'|'upload'|'machines'|'documents'|'propose'|'approve'|'evals'|'users';
-const allowed:Record<Action,Role[]>={analyze:['admin','engineer','qa_lead'],upload:['admin','engineer'],machines:['admin'],documents:['admin','engineer'],propose:['admin','engineer'],approve:['admin','qa_lead'],evals:['admin','qa_lead'],users:['admin']};
+export interface User {id:string;email:string;name?:string;role:Role;active:boolean}
+export type Action='analyze'|'upload'|'machines'|'documents'|'plant_documents'|'propose'|'approve'|'evals'|'users'|'draft';
+const allowed:Record<Action,Role[]>={analyze:['admin','engineer','qa_lead'],upload:['admin','engineer'],machines:['admin'],documents:['admin','engineer'],propose:['admin','engineer'],approve:['admin','qa_lead'],evals:['admin','qa_lead'],users:['admin'],draft:['admin','engineer','qa_lead'],plant_documents:['admin']};
 const Auth=createContext<{user:User|null;loading:boolean;login:(email:string,password:string)=>Promise<void>;logout:()=>Promise<void>;can:(a:Action)=>boolean}>(null!);
 export const useAuth=()=>useContext(Auth);
 export function AuthProvider({children}:{children:ReactNode}) {

@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { saveCase } from "../../api/endpoints";
 import { errorMessage } from "../../api/client";
-import { ALL_CATEGORIES, type Category, type Subcause } from "../../types/api";
+import { ALL_CATEGORIES, type AnalysisResponse, type Category, type Subcause } from "../../types/api";
 import { categoryLabel } from "../../lib/format";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
@@ -17,11 +17,13 @@ export function SaveCaseModal({
   onClose,
   incidentId,
   draft,
+  analysis,
 }: {
   open: boolean;
   onClose: () => void;
   incidentId: string;
   draft: string;
+  analysis?: AnalysisResponse | null;
 }) {
   const [category, setCategory] = useState<Category | "">("");
   const [subcause, setSubcause] = useState<Exclude<Subcause, null> | "">("");
@@ -62,8 +64,10 @@ export function SaveCaseModal({
         confirmed_subcause: needsSubcause ? (subcause as Exclude<Subcause, null>) : null,
         notes: notes.trim() || null,
         fix_applied:fix.trim(),lessons,
+        documents_used:(analysis?.documents_accessed||[]).map(d=>d.doc_id),
       });
       setSavedId(res.case_id);
+      window.dispatchEvent(new Event('rca-counts-changed'));
     } catch (err) {
       setError(errorMessage(err));
     } finally {

@@ -71,6 +71,8 @@ class User(Base):
     role = Column(String, nullable=False)
     active = Column(Boolean, default=True, nullable=False)
     token_version = Column(Integer, default=0, nullable=False)
+    name = Column(String, nullable=True)
+    created_at = Column(UTCDateTime, default=now)
 
 class Machine(Base):
     __tablename__ = "machines"
@@ -172,6 +174,35 @@ class EvalResult(Base):
     run_id = Column(String, ForeignKey("eval_runs.run_id", ondelete="CASCADE"), nullable=False)
     suite = Column(String, nullable=False)
     data = Column(JSONType, nullable=False)
+
+class Incident(Base):
+    """Registry of sample (evaluation set) and uploaded incidents. Status is derived, never stored.
+    start_time/end_time are the CSV's own clock (ISO text, no timezone)."""
+    __tablename__ = "incidents"
+    incident_id = Column(String, primary_key=True)
+    source = Column(String, nullable=False)          # sample | uploaded
+    filename = Column(String, nullable=False)
+    line = Column(String, nullable=False)
+    machines = Column(JSONType, nullable=False)
+    start_time = Column(String, nullable=False)
+    end_time = Column(String, nullable=False)
+    record_count = Column(Integer, nullable=False)
+    affected_machines = Column(JSONType, nullable=True)   # computed lazily from signals + hypothesis targets
+    uploaded_by = Column(String, ForeignKey("users.id"), nullable=True)
+    created_at = Column(UTCDateTime, default=now)
+
+class RcaDraft(Base):
+    """Every save is a new version; restore copies an old version into a new one."""
+    __tablename__ = "rca_drafts"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    incident_id = Column(String, nullable=False, index=True)
+    run_id = Column(String, ForeignKey("analysis_runs.run_id", ondelete="SET NULL"), nullable=True)
+    version = Column(Integer, nullable=False)
+    content = Column(Text, nullable=False)
+    note = Column(String, nullable=True)
+    author_id = Column(String, ForeignKey("users.id"), nullable=True)
+    created_at = Column(UTCDateTime, default=now)
+    __table_args__ = (Index("uq_rca_drafts_incident_version", "incident_id", "version", unique=True),)
 
 class LLMUsage(Base):
     """One row per provider request (including failed ones); the daily budget counts today's rows."""

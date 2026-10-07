@@ -19,11 +19,14 @@ import { HypothesisCard } from "../components/analysis/HypothesisCard";
 import { SopModal } from "../components/analysis/SopModal";
 import { CategoryEvidenceGrid } from "../components/analysis/CategoryEvidenceGrid";
 import { SimilarCases } from "../components/analysis/SimilarCases";
-import { RcaDraft } from "../components/analysis/RcaDraft";
+import { DraftPanel } from "../components/analysis/DraftPanel";
 import { SaveCaseModal } from "../components/analysis/SaveCaseModal";
 import {useAuth} from '../auth';
 import {request} from '../api/client';
 import {InvestigationPanels} from '../components/analysis/InvestigationPanels';
+import { Link } from 'react-router-dom';
+import type { Draft, IncidentWorkflow } from '../types/workflow';
+import { CaseStatusBadge, SourceBadge, StatusBadge } from '../components/ui/StatusBadge';
 
 // UI wording only — not real backend stages.
 const LOADING_LABELS = [
@@ -58,6 +61,10 @@ export function IncidentPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [baseline, setBaseline] = useState("");
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [workflow, setWorkflow] = useState<IncidentWorkflow | null>(null);
+  const refreshWorkflow = () => request<IncidentWorkflow>('/api/incidents/'+encodeURIComponent(id)+'/workflow').then(setWorkflow).catch(()=>{});
   const [sopId, setSopId] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const resultsRef = useRef<HTMLDivElement>(null);
@@ -76,6 +83,11 @@ export function IncidentPage() {
     setAnalysis(null);
     setAnalyzeError(null);
     setDraft("");
+    setBaseline("");
+    setDrafts([]);
+    setWorkflow(null);
+    request<IncidentWorkflow>('/api/incidents/'+encodeURIComponent(id)+'/workflow').then(w=>alive&&setWorkflow(w)).catch(()=>{});
+    const savedDrafts=request<Draft[]>('/api/incidents/'+encodeURIComponent(id)+'/drafts').catch(()=>[] as Draft[]);
     getIncident(id)
       .then((s) => alive && setSummary(s))
       .catch((e) => alive && setSummaryError(e));
@@ -83,7 +95,15 @@ export function IncidentPage() {
       .then((s) => alive && setSignals(s))
       .catch((e) => alive && setSignalsError(errorMessage(e)));
     request<{run_id:string}[]>('/api/analyses?incident_id='+encodeURIComponent(id)).then(async runs=>{
-      if(runs.length&&alive){const result=await request<AnalysisResponse>('/api/analyses/'+runs[0].run_id);if(alive&&historyToken===activeRun.current){setAnalysis(result);setDraft(result.rca_draft);}}
+      const versions=await savedDrafts;
+      if(!alive||historyToken!==activeRun.current)return;
+      setDrafts(versions);
+      const result=runs.length?await request<AnalysisResponse>('/api/analyses/'+runs[0].run_id):null;
+      if(!alive||historyToken!==activeRun.current)return;
+      if(result)setAnalysis(result);
+      // A saved draft survives reloads; otherwise start from the analysis draft.
+      const text=versions[0]?.content??result?.rca_draft??'';
+      setDraft(text);setBaseline(text);
     }).catch(()=>{});
     return () => {
       alive = false;
@@ -98,7 +118,9 @@ export function IncidentPage() {
       const res = await analyzeIncident(id);
       if (runToken !== activeRun.current) return;
       setAnalysis(res);
-      setDraft(res.rca_draft); // engineer edits reset only on a new analysis
+      setDraft(res.rca_draft); // a new analysis starts a new draft; saved versions stay in the history
+      setBaseline(res.rca_draft);
+      void refreshWorkflow();
       setWarning(res.warning);
       window.dispatchEvent(new Event('rca-llm-used'));
       window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
@@ -131,7 +153,7 @@ export function IncidentPage() {
 
   return (
     <div className="fade-in space-y-6">
-      <Button to="/" variant="ghost" size="sm" icon={<ArrowLeft size={15} aria-hidden="true" />} className="-ml-2">
+      <Button to="/incidents" variant="ghost" size="sm" icon={<ArrowLeft size={15} aria-hidden="true" />} className="-ml-2">
         All incidents
       </Button>
 
@@ -140,6 +162,17 @@ export function IncidentPage() {
         <div className="min-w-0">
           <p className="text-sm font-semibold text-indigo-700">Incident investigation</p>
           <h1 className="mt-1 break-all font-mono text-3xl font-bold tracking-tight text-ink-900 sm:text-4xl">{id}</h1>
+          {workflow && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <StatusBadge status={workflow.status} />
+              <SourceBadge source={workflow.source} />
+              {workflow.cases.map((c) => (
+                <Link key={c.case_id} to={`/cases/${c.case_id}`} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50">
+                  Case {c.case_id.slice(0, 13)} <CaseStatusBadge status={c.status} />
+                </Link>
+              ))}
+            </div>
+          )}
           {summary ? (
             <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-slate-600">
               <span className="font-mono font-semibold text-ink-700">{summary.line}</span>
@@ -253,18 +286,22 @@ export function IncidentPage() {
           <CategoryEvidenceGrid items={analysis.category_evidence} />
           <InvestigationPanels analysis={analysis}/>
           <SimilarCases cases={analysis.similar_cases} />
-          <RcaDraft
+          <DraftPanel
+            incidentId={id}
+            runId={analysis.run_id}
             value={draft}
-            original={analysis.rca_draft}
+            baseline={baseline}
             onChange={setDraft}
+            drafts={drafts}
+            onSaved={(d) => { setDrafts((all) => [d, ...all]); setDraft(d.content); setBaseline(d.content); void refreshWorkflow(); }}
             warning={analysis.warning || warning}
-            onSave={() => setSaveOpen(true)}
+            onPropose={() => setSaveOpen(true)}
           />
         </div>
       )}
 
       <SopModal sopId={sopId} onClose={() => setSopId(null)} />
-      <SaveCaseModal open={saveOpen} onClose={() => setSaveOpen(false)} incidentId={id} draft={draft} />
+      <SaveCaseModal open={saveOpen} onClose={() => { setSaveOpen(false); void refreshWorkflow(); }} incidentId={id} draft={draft} analysis={analysis} />
     </div>
   );
 }

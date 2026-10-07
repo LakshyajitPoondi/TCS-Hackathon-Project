@@ -32,3 +32,10 @@ export function fmtBytes(b: number) {
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
   return `${(b / 1024 / 1024).toFixed(1)} MB`;
 }
+
+/** System timestamps (UTC with offset) shown in the viewer's local time, e.g. "07 Oct 2026, 14:05". */
+export function fmtStamp(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(undefined, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}

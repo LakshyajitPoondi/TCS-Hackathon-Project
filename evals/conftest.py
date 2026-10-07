@@ -31,6 +31,7 @@ def isolated_db(tmp_path,monkeypatch,db_kind):
         monkeypatch.setenv('DB_BOOTSTRAP','create_all')
         monkeypatch.setattr(config,'JWT_SECRET',secrets.token_urlsafe(48))
         monkeypatch.setattr(config,'DOCUMENTS_DIR',tmp_path/'documents')
+        monkeypatch.setattr(config,'UPLOADS_DIR',tmp_path/'uploads')
         monkeypatch.setattr(config,'LLM_CACHE_DIR',tmp_path/'llm_cache')
         monkeypatch.setattr(config,'EMBEDDINGS_PROVIDER','none')
         for name in ('SEED_ADMIN_EMAIL','SEED_ADMIN_PASSWORD','DEMO_USERS_ENABLED'):

@@ -3,9 +3,8 @@ from sqlalchemy import select,func
 from fastapi import APIRouter,Depends,HTTPException,UploadFile,File,Form
 from pydantic import BaseModel,Field
 from backend import db
-from backend.auth import require
+from backend.auth import require,PERMISSIONS
 from backend.services import documents,machines
-from backend.services.data_loader import list_incidents,load_incident
 
 router=APIRouter(prefix='/api',tags=['machines and documents'])
 class MachineBody(BaseModel):
@@ -55,10 +54,15 @@ def linked(machine_uid:str,user=Depends(require('view'))):
 
 @router.get('/machines/{machine_uid:path}/incidents')
 def related(machine_uid:str,user=Depends(require('view'))):
-    with db.Session() as s:
+    """B12: incidents on this line where this machine actually deviated or is a hypothesis target."""
+    from backend.services import workflow
+    with db.Session.begin() as s:
         m=s.get(db.Machine,machine_uid)
         if not m:raise HTTPException(404,'Machine not found')
-        return [r for r in list_incidents() if (lambda f:m.line in f.line.values and m.short_name in f.machine.values)(load_incident(r['id']))]
+        workflow.register_existing(s)
+        rows=[r for r in s.scalars(select(db.Incident).where(db.Incident.line==m.line).order_by(db.Incident.incident_id))
+              if m.short_name in r.machines and m.short_name in workflow.affected_machines(s,r)]
+        return workflow.incident_rows(s,rows)
 
 @router.get('/machines/{machine_uid:path}')
 def get_machine(machine_uid:str,user=Depends(require('view'))):
@@ -81,7 +85,7 @@ def edit_machine(machine_uid:str,body:MachineBody,user=Depends(require('machines
 @router.get('/documents')
 def list_docs(machine_uid:str|None=None,doc_type:str|None=None,status:str|None=None,user=Depends(require('view'))):
     with db.Session() as s:
-        query=select(db.Document)
+        query=select(db.Document).order_by(db.Document.uploaded_at.desc(),db.Document.doc_id)
         if machine_uid:query=query.join(db.DocumentMachineLink).where(db.DocumentMachineLink.machine_uid==machine_uid)
         if doc_type:query=query.where(db.Document.doc_type==doc_type)
         if status:query=query.where(db.Document.status==status)
@@ -113,11 +117,17 @@ class Mapping(BaseModel):
     targets:list[str]=Field(default_factory=list)
     status:str|None=None
 
+def plant_guard(doc,body,user):
+    """B11: only administrators may archive or re-map plant-wide documents (they ground every analysis)."""
+    if (doc.scope=='plant' or body.scope=='plant') and user.role not in PERMISSIONS['plant_documents']:
+        raise HTTPException(403,'Only administrators can archive or re-map plant-wide documents')
+
 @router.post('/documents/{doc_id}/confirm')
 def confirm_doc(doc_id:str,body:Mapping,user=Depends(require('documents'))):
     with db.Session.begin() as s:
         d=s.get(db.Document,doc_id)
         if not d:raise HTTPException(404,'Document not found')
+        plant_guard(d,body,user)
         ms=list(s.scalars(select(db.Machine)));documents.validate_mapping(body.scope,body.targets,ms)
         d.scope=body.scope;d.targets=body.targets;d.status='active'
         d.detection={**d.detection,'confirmed_by':user.id}
@@ -130,6 +140,7 @@ def edit_doc(doc_id:str,body:Mapping,user=Depends(require('documents'))):
     with db.Session.begin() as s:
         d=s.get(db.Document,doc_id)
         if not d:raise HTTPException(404,'Document not found')
+        plant_guard(d,body,user)
         ms=list(s.scalars(select(db.Machine)));documents.validate_mapping(body.scope,body.targets,ms)
         d.scope=body.scope;d.targets=body.targets;d.status=body.status or 'pending_mapping'
         if body.title is not None:

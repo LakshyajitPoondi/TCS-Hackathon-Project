@@ -14,10 +14,8 @@ from backend.core import config
 
 from backend.core.config import (
     EXPECTED_COLUMNS,
-    INCIDENTS_DIR,
     MAX_UNPARSEABLE_FRACTION,
     NUMERIC_COLUMNS,
-    UPLOADS_DIR,
 )
 
 
@@ -30,10 +28,12 @@ class IncidentValidationError(Exception):
 
 
 # id prefix -> (filename prefix, directory). INC = curated eval set, UPL = user uploads.
-_SOURCES: dict[str, tuple[str, Path]] = {
-    "INC": ("incident_", INCIDENTS_DIR),
-    "UPL": ("upload_", UPLOADS_DIR),
-}
+# Directories are read from config at call time so tests can redirect uploads.
+_PREFIX = {"INC": "incident_", "UPL": "upload_"}
+
+
+def _directory(kind: str) -> Path:
+    return config.INCIDENTS_DIR if kind == "INC" else config.UPLOADS_DIR
 _ID_RE = re.compile(r"^(INC|UPL)-([A-Za-z0-9]+)$")
 _FILENAME_RE = re.compile(r"^(incident|upload)_([A-Za-z0-9]+)\.csv$")
 
@@ -46,7 +46,7 @@ def incident_id_to_filename(incident_id: str) -> str:
     if not match:
         raise IncidentNotFoundError(f"Incident not found: {incident_id}")
     prefix, suffix = match.groups()
-    return f"{_SOURCES[prefix][0]}{suffix}.csv"
+    return f"{_PREFIX[prefix]}{suffix}.csv"
 
 
 def filename_to_incident_id(filename: str) -> str | None:
@@ -60,7 +60,7 @@ def filename_to_incident_id(filename: str) -> str | None:
 
 def resolve_incident_path(incident_id: str) -> Path:
     filename = incident_id_to_filename(incident_id)
-    directory = _SOURCES[incident_id[:3]][1].resolve()
+    directory = _directory(incident_id[:3]).resolve()
     path = (directory / filename).resolve()
     if path.parent != directory or not path.is_file():
         raise IncidentNotFoundError(f"Incident not found: {incident_id}")
@@ -68,9 +68,9 @@ def resolve_incident_path(incident_id: str) -> Path:
 
 
 def list_incidents() -> list[dict]:
-    """Curated incidents only. Uploads are excluded to keep the eval set clean."""
+    """Curated sample incidents only (the evaluation set). Uploads are listed by the incident registry."""
     refs = []
-    for path in INCIDENTS_DIR.glob("incident_*.csv"):
+    for path in config.INCIDENTS_DIR.glob("incident_*.csv"):
         incident_id = filename_to_incident_id(path.name)
         if incident_id:
             refs.append({"id": incident_id, "filename": path.name})
@@ -167,8 +167,18 @@ def save_upload(content: bytes, original_filename: str = "incident.csv") -> dict
                 normal=machine.data.get('normal_ranges',{}).get(signal)
                 if normal and normal['max']>0 and (group[signal]>normal['max']*multiplier).any():
                     raise IncidentValidationError(f'{uid}: {signal} exceeds generous baseline plausibility bound')
-    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    config.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     short = uuid.uuid4().hex
     filename = f"upload_{short}.csv"
-    (UPLOADS_DIR / filename).write_bytes(content)
+    (config.UPLOADS_DIR / filename).write_bytes(content)
     return {"id": filename_to_incident_id(filename), "filename": filename}
+
+
+def list_uploads() -> list[dict]:
+    """Uploaded incident files on disk (registered in the incident registry on upload or at seed time)."""
+    refs = []
+    for path in config.UPLOADS_DIR.glob("upload_*.csv"):
+        incident_id = filename_to_incident_id(path.name)
+        if incident_id:
+            refs.append({"id": incident_id, "filename": path.name})
+    return sorted(refs, key=lambda r: r["id"])

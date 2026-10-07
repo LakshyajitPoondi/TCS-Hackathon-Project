@@ -13,7 +13,8 @@ from backend.core import config
 ROLES = {"admin", "engineer", "qa_lead", "viewer"}
 PERMISSIONS = {"view":ROLES, "analyze":{"admin","engineer","qa_lead"}, "upload":{"admin","engineer"},
     "machines":{"admin"}, "documents":{"admin","engineer"}, "propose":{"admin","engineer"},
-    "approve":{"admin","qa_lead"}, "evals":{"admin","qa_lead"}, "users":{"admin"}}
+    "approve":{"admin","qa_lead"}, "evals":{"admin","qa_lead"}, "users":{"admin"},
+    "draft":{"admin","engineer","qa_lead"}, "plant_documents":{"admin"}}
 _development_secret = secrets.token_urlsafe(48)
 bearer = HTTPBearer(auto_error=False)
 
@@ -33,7 +34,8 @@ def hash_password(password):
     return bcrypt.hashpw(raw,bcrypt.gensalt()).decode()
 
 def public_user(user):
-    return {"id":user.id,"email":user.email,"role":user.role,"active":user.active}
+    from backend.services.workflow import display_name
+    return {"id":user.id,"email":user.email,"name":display_name(user),"role":user.role,"active":user.active}
 
 def issue_token(user):
     now=datetime.now(timezone.utc)
@@ -70,10 +72,11 @@ def seed_users():
         demo=os.getenv("DEMO_PASSWORD","")
         if not demo: raise ValueError("DEMO_PASSWORD required when demo users enabled")
         profiles += [(f"{name}@demo.local",demo,role) for name,role in [('engineer','engineer'),('qa','qa_lead'),('viewer','viewer')]]
+    names={'admin':'Administrator','engineer':'Plant Engineer','qa_lead':'QA Lead','viewer':'Viewer'}
     from sqlalchemy import select
     with db.Session.begin() as session:
         for email,password,role in profiles:
             if not session.scalar(select(db.User).where(db.User.email==email)):
-                user=db.User(id=uuid.uuid4().hex,email=email,password_hash=hash_password(password),role=role,active=True,token_version=0)
+                user=db.User(id=uuid.uuid4().hex,email=email,name=names[role],password_hash=hash_password(password),role=role,active=True,token_version=0)
                 session.add(user); session.flush()
                 db.audit(session,user.id,"seed_user",{"email":email,"role":role})

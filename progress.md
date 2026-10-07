@@ -2,7 +2,7 @@
 
 ## v2 build (branch feature/v2, from main c58eed5)
 Prompt: v2 stages 0–9 (see audit_report_v2.md for bug IDs B1–B20). Each stage ends with checks, this file, and a commit "v2 stage N: …".
-**Next unfinished stage: 3.**
+**Next unfinished stage: 4.**
 
 ### Live LLM call counter (budget 10 for the whole build)
 Used: 2 of 10.
@@ -23,9 +23,24 @@ Used: 2 of 10.
 - D2.3 LLM output cache moved from data/llm_cache files to table llm_cache, keyed by kind + incident + input hash (which includes provider, model, prompt version and the full analysis payload). Agent plans are cached the same way (kind agent_plan).
 - D2.4 AGENT_MODE=llm_plan sends hypotheses (rank/category/subcause/confidence/target only), allowed machines, retrieved chunk ids and the recommended deterministic plan; the returned plan is executed with the same authorization checks. AnalysisResponse gained an additive `llm_usage` field {requests, cache_hits, fallback_reason, per_analysis_budget}; investigation gained `plan_source`.
 - D2.5 The test-only fake provider runs through the same HTTP status handling; LLM_FAKE_SCENARIO = ok | quota | rate_limit | 503 | 503_once | invalid_json.
+- D3.1 Incident registry table `incidents` (sample + uploaded) holds file metadata; status is derived on every request: case_approved > case_proposed > case_rejected > draft_saved > analysed > new. Top hypothesis is stored in analysis_runs.config at analyse time.
+- D3.2 B12 "affected machines" = machines that deviated (co-movement), whose defects rose, or that a hypothesis targets; computed once and stored; falls back to all machines in the file when nothing deviated.
+- D3.3 New permission `draft` (admin, engineer, qa_lead) saves/restores drafts; every role can read and export. New permission `plant_documents` (admin) implements B11 for archive/re-map/confirm of plant-scope documents (existing or target scope).
+- D3.4 Users gained `name` (display name; falls back to a title-cased email local part). Seeded names: Administrator, Plant Engineer, QA Lead, Viewer.
+- D3.5 PDF export uses fpdf2 core fonts (Latin-1); symbols such as → ≥ ± are transliterated. The validation notice is added by the server at the top and bottom of every export.
+- D3.6 UPLOADS_DIR is configurable (tests/eval workers use temp folders). The headless walk uses its own database `rca_walk` and in-memory auth values so the owner's `rca` database never gets throwaway demo passwords.
 - D1.7 Code defaults changed to DATABASE_URL=postgresql+psycopg://rca:rca@localhost:5433/rca and EMBEDDINGS_PROVIDER=fastembed. The owner's .env still says sqlite + none, so the owner must change those two lines to use Postgres/pgvector.
 
 ### v2 stage log
+#### Stage 3 complete
+- B5: GET /api/incidents lists sample + uploaded incidents with source label, line/machines, date, top hypothesis and status (uploads still never enter evals). Status badge on dashboard, incident list, incident page, machine page; cases show case status.
+- B8: table rca_drafts, versioned saves, history with view + restore (restore = new version), Markdown/PDF export with an irremovable validation notice, viewers read-only. Saved draft is loaded on page open.
+- Links both ways (incident header → its cases; case → incident and documents), case detail page /cases/:id, names instead of IDs (proposer, approver, uploader, draft author).
+- Dashboard (home): KPI cards (open incidents, cases pending, documents pending mapping, LLM calls today), incidents-by-status, recent incidents, role-specific pending items. Sidebar badges for pending documents (doc editors) and pending cases (approvers), refreshed on navigation and after actions.
+- Fixed B6 (summary on review records reviewer + date), B11, B12, B18 (machine edit sends '' for required text), B4/B19 (stage 1). create_machine link rebuild (stage 1).
+- Tests: SQLite 61 passed + 1 skipped; Postgres 62 passed (new evals/test_workflow.py: B5 listing, status transitions incl. rejected, draft versions/restore/validation, viewer read-only, MD/PDF exports keep notice, B11, B12, dashboard + nav counts; RBAC matrix extended with all new endpoints).
+- Headless walk (evals/browser/workflow_walk.mjs, Chrome headless via playwright-core in scratch, backend 8001 on Postgres rca_walk, Vite 5173): **8/8 steps pass** with no reloads or URL workarounds; first run found a stale sidebar badge (fixed with a counts-changed event). Draft survived reload with 2 versions; Markdown + PDF downloads contained the notice; QA approval showed names; INC-009 recalled the approved case; evaluations 32 metrics pass; viewer read-only.
+
 #### Stage 2 complete
 - B2 fixed (no retry on 429/quota, ≤2 retries on 503 with 1 s/2 s backoff, immediate template fallback recording quota_exhausted). B3 fixed (AGENT_MODE deterministic default with zero LLM calls; llm_plan = one call). One wording call per analysis covers narratives, steps and draft. Daily budget table + GET /api/llm/status. UI: top-bar chip "LLM calls today: x / 18" (warns on quota/budget/no key), analysis shows text source, LLM requests used/budget, cache hits and fallback reason, agent mode.
 - Tests: SQLite 54 passed + 1 skipped; Postgres 55 passed. New fake/mocked tests: quota not retried + blocks next call, long Retry-After, short 429, 503 ×2 then fail, 503 once then success, 4xx not retried, invalid JSON, daily budget, per-analysis budget, cache hit makes no request, analysis = exactly 2 requests then 0 on re-run, stored analysis re-open makes 0. Eval suite "LLM layer" adds quota_and_budget_fallback_rate (1.0); agent suite adds llm_plan_single_call_within_budget (1.0).

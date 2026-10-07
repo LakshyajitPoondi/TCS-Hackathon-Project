@@ -63,6 +63,8 @@ def init_db():
             if not session.get(db.Document,path.stem):
                 title=path.read_text(encoding='utf-8').splitlines()[0].split(':',1)[1].strip()
                 ingest(session,path.name,path.read_bytes(),title,'sop','1','plant',[],None,doc_id=path.stem)
+        from backend.services.workflow import register_existing
+        register_existing(session)
         for item in json.loads(MEMORY_SEED_PATH.read_text(encoding="utf-8")):
             if not session.get(db.Case, item["case_id"]):
                 item = {**item, 'machine_uid':item['line']+'/'+item['machine'], 'model':'IMM',

@@ -8,7 +8,6 @@ API_VERSION = "0.1.0"
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT_DIR / "data"
 INCIDENTS_DIR = DATA_DIR / "incidents"
-UPLOADS_DIR = DATA_DIR / "uploads"
 
 EXPECTED_COLUMNS = [
     "timestamp", "line", "machine", "event_code", "temperature", "speed",
@@ -87,6 +86,7 @@ LLM_MAX_CALLS_PER_ANALYSIS = max(0, int(os.getenv("LLM_MAX_CALLS_PER_ANALYSIS", 
 LLM_FAKE_SCENARIO = os.getenv("LLM_FAKE_SCENARIO", "ok").strip().lower()
 AGENT_MAX_STEPS = max(1, min(30, int(os.getenv("AGENT_MAX_STEPS", "10"))))
 DOCUMENTS_DIR = Path(os.getenv("DOCUMENTS_DIR", "") or DATA_DIR / "documents")
+UPLOADS_DIR = Path(os.getenv("UPLOADS_DIR", "") or DATA_DIR / "uploads")
 EMBEDDINGS_PROVIDER = os.getenv("EMBEDDINGS_PROVIDER", "fastembed").strip().lower()
 EMBEDDINGS_MODEL = os.getenv("EMBEDDINGS_MODEL", "BAAI/bge-small-en-v1.5")
 EMBEDDINGS_API_KEY = os.getenv("EMBEDDINGS_API_KEY", "")

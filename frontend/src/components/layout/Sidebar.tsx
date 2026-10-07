@@ -1,11 +1,26 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { CheckCircle2, GitBranch, Upload, X,Factory,FileText,Users,BookOpen } from "lucide-react";
+import { CheckCircle2, GitBranch, Upload, X,Factory,FileText,Users,BookOpen,LayoutDashboard } from "lucide-react";
 import {useAuth} from '../../auth';
+import {request} from '../../api/client';
+
+/** Pending counts for sidebar badges; refreshed on navigation and every 60 s. */
+function useNavCounts(pathname: string) {
+  const [counts, setCounts] = useState<{ documents_pending: number; cases_pending: number } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () => request<{ documents_pending: number; cases_pending: number }>("/api/nav/counts").then((c) => alive && setCounts(c)).catch(() => {});
+    load();
+    const t = window.setInterval(load, 60000);
+    window.addEventListener("rca-counts-changed", load);
+    return () => { alive = false; window.clearInterval(t); window.removeEventListener("rca-counts-changed", load); };
+  }, [pathname]);
+  return counts;
+}
 
 const NAV = [
-  // "Analysis" covers the incident list and every incident page.
-  { to: "/", label: "Analysis", icon: GitBranch, match: (p: string) => p === "/" || p.startsWith("/incidents") },
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, match: (p: string) => p === "/" },
+  { to: "/incidents", label: "Incidents", icon: GitBranch, match: (p: string) => p.startsWith("/incidents") },
   { to: "/upload", label: "Upload data", icon: Upload, match: (p: string) => p.startsWith("/upload") },
   { to:'/machines',label:'Machines',icon:Factory,match:(p:string)=>p.startsWith('/machines')},
   { to:'/documents',label:'Documents',icon:FileText,match:(p:string)=>p.startsWith('/documents')},
@@ -17,10 +32,13 @@ const NAV = [
 function NavItems({ onNavigate }: { onNavigate?: () => void }) {
   const { pathname } = useLocation();
   const {can}=useAuth();
+  const counts=useNavCounts(pathname);
+  const badge:Record<string,number|undefined>={'/documents':can('documents')?counts?.documents_pending:undefined,'/cases':can('approve')?counts?.cases_pending:undefined};
   return (
     <nav aria-label="Main" className="flex flex-col gap-1 p-3">
       {NAV.filter(n=>(n.to!='/upload'||can('upload'))&&(n.to!='/users'||can('users'))).map(({ to, label, icon: Icon, match }) => {
         const active = match(pathname);
+        const count = badge[to];
         return (
           <Link
             key={to}
@@ -34,6 +52,9 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
             {active && <span className="absolute bottom-2 left-0 top-2 w-[3px] rounded-r bg-indigo-700" aria-hidden="true" />}
             <Icon size={20} strokeWidth={1.75} aria-hidden="true" />
             {label}
+            {!!count && (
+              <span className="ml-auto rounded-full bg-warning-tint px-2 py-0.5 font-mono text-[11px] font-bold text-warning-ink" aria-label={`${count} pending`}>{count}</span>
+            )}
           </Link>
         );
       })}

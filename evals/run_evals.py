@@ -42,7 +42,7 @@ def subprocess_result(module,**options):
     docs=tempfile.mkdtemp(prefix='rca-eval-documents-')
     try:
         with scratch_database(os.getenv('EVAL_DB','sqlite'),directory) as url:
-            env=child_env(url);env.update(DOCUMENTS_DIR=docs,**options)
+            env=child_env(url);env.update(DOCUMENTS_DIR=docs,UPLOADS_DIR=os.path.join(docs,'uploads'),**options)
             result=subprocess.run([sys.executable,'-m',module,'--worker'],cwd=config.ROOT_DIR,env=env,capture_output=True,text=True,encoding='utf-8',timeout=600)
             if result.returncode:raise RuntimeError('Evaluation worker failed: '+result.stderr[-2000:])
             return json.loads(result.stdout.splitlines()[-1])
