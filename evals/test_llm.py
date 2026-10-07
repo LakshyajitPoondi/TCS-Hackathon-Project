@@ -179,3 +179,12 @@ def test_key_resolution_b1():
     assert resolve_llm_key('groq','   ','g1') == ('g1','GROQ_API_KEY')
     assert resolve_llm_key('openai_compatible','','g1') == ('',None)
     assert resolve_llm_key('gemini',None,'') == ('',None)
+
+
+def test_plan_503_fails_fast_and_wording_keeps_budget(client,monkeypatch):
+    monkeypatch.setattr(config,'LLM_PROVIDER','fake'); monkeypatch.setattr(config,'AGENT_MODE','llm_plan')
+    monkeypatch.setattr(config,'LLM_FAKE_SCENARIO','503_once'); monkeypatch.setitem(llm._fake_state,'503_once',0)
+    monkeypatch.setattr(llm,'_sleep',lambda s:None)
+    r=client.post('/api/incidents/INC-001/analyze').json()
+    assert r['investigation']['mode']=='deterministic' and r['text_source']=='llm'   # plan gave up after one 503, wording succeeded
+    assert [x.status for x in usage_rows()]==['http_503','ok'] and r['llm_usage']['requests']==2

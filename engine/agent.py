@@ -42,7 +42,8 @@ def _plan(incident_id, payload, fallback):
         llm._cache_hit('agent_plan')
         return cached, 'cache'
     out = llm.request_json(PLAN_PROMPT.replace('{max_steps}', str(config.AGENT_MAX_STEPS)), payload, ToolPlan,
-                           purpose='agent_plan', fake_output={'steps': fallback})
+                           purpose='agent_plan', fake_output={'steps': fallback},
+                           retries_503=0)  # the plan is optional: fail fast and keep the budget for the wording call
     if not out:
         return None, 'deterministic'
     steps = parse(out)

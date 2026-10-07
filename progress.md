@@ -2,11 +2,12 @@
 
 ## v2 build (branch feature/v2, from main c58eed5)
 Prompt: v2 stages 0–9 (see audit_report_v2.md for bug IDs B1–B20). Each stage ends with checks, this file, and a commit "v2 stage N: …".
-**Next unfinished stage: 8.**
+**Next unfinished stage: 9.**
 
 ### Live LLM call counter (budget 10 for the whole build)
-Used: 2 of 10.
+Used: 4 of 10.
 1–2. Stage 2 `python -m evals.live_llm_check --max-calls 2` (gemini-3.8-flash, key passed in memory from GROQ_API_KEY because .env has LLM_API_KEY empty): both requests were the agent-plan call, both HTTP 503 "overloaded" (5.1 s, 1.0 s). Per-analysis budget then stopped further calls; template wording used; grounding passed. Live LLM wording/plan: **Unverified (provider 503)**. Quota was not hit (no 429).
+3–4. Stage 8, same command: again both requests were the agent-plan call, HTTP 503 (18.4 s, 15.2 s). Template wording, grounding passed. **Unverified (provider 503)**. Follow-up D8.2: the plan call no longer retries 503, so a later attempt reaches the wording call.
 
 ### v2 decisions (made by the agent)
 - D0.1 `.env` does not match the brief: LLM_PROVIDER=openai_compatible, LLM_API_KEY empty (the key sits in GROQ_API_KEY), JWT_SECRET / SEED_ADMIN_* / DEMO_PASSWORD empty. `.env` is never written by the agent. After B1 the key in GROQ_API_KEY is only read for provider=groq, so the owner must move it to LLM_API_KEY and set LLM_PROVIDER=gemini. A warning is logged at start-up when this mismatch is detected (no key printed).
@@ -43,9 +44,17 @@ Used: 2 of 10.
 - D7.1 Every route is a lazy chunk (React.lazy + Suspense in the shell); the shell, auth and UI primitives stay in the main bundle. IncidentPage (413 kB, includes Recharts) is the largest route chunk.
 - D7.2 Audit viewer: GET /api/audit (admin only) with user / action / date range (UTC days) filters and limit/offset paging; /audit page with URL-synced filters.
 - D7.3 evals/conftest.py pins the LLM/agent settings tests depend on, so a shell or .env with LLM_ENABLED=false, budget 0 or AGENT_MODE=llm_plan cannot change test outcomes (found when a test run inherited the walk environment; verified passing under that hostile environment).
+- D8.1 Evaluation suites now: RCA ranking, document mapping, retrieval (lexical + hybrid real-embedding benchmark with backend label), grounding, LLM layer (fake/mocked incl. quota/503/budgets), investigation agent, experience memory (LOO), RBAC (57 endpoint/method pairs × 5 identities), Workflow and drafts (new), Memory agent (new), optional LLM judge (Unverified unless JUDGE_ENABLED with a live key, which spends calls). The two new suites run in their own scratch database through the real HTTP API (evals/workflow_check.py) with the fake LLM and deterministic bag-of-words embeddings.
+- D8.2 The optional agent-plan call fails fast on 503 (no retry) so the per-analysis budget is left for the wording call; wording keeps up to two 503 retries.
 - D1.7 Code defaults changed to DATABASE_URL=postgresql+psycopg://rca:rca@localhost:5433/rca and EMBEDDINGS_PROVIDER=fastembed. The owner's .env still says sqlite + none, so the owner must change those two lines to use Postgres/pgvector.
 
 ### v2 stage log
+#### Stage 8 complete
+- Retrieval suite: lexical (Postgres FTS) recall@k 0.852 / MRR 1.0 / leaks 0 / filtered-out 1.0; hybrid real-embedding benchmark on **postgres+pgvector** (fastembed BAAI/bge-small-en-v1.5, 75 chunks re-embedded with the real model first): recall@4 **1.0**, MRR **1.0**, wrong-machine leaks **0**, filtered-out correctness **1.0**.
+- New suites: Workflow and drafts (status sequence new→analysed→draft_saved→case_proposed→case_approved + rejected branch = 1.0; versions/restore/MD+PDF export/viewer read-only = 1.0); Memory agent (summary fields template + fake LLM 1.0, duplicate detection 1.0, retired never recalled 1.0, semantic recall 1.0, edit versioning 1.0). RBAC matrix 1.0 over 57 endpoint/method pairs. LLM layer: schema/fallback 1.0, quota/budget fallback 1.0.
+- Live LLM: 2 more requests (total 4/10), both 503 → Unverified. Plan call now fails fast on 503 (new test).
+- Tests: SQLite 84 passed + 1 skipped; Postgres 85 passed (incl. test_evaluations with 11 suites).
+
 #### Stage 7 complete
 - B20: route code-splitting, main JS 760 kB → 276 kB, no Vite chunk-size warning. Audit-log viewer (admins). README rewritten (Docker + Postgres, Alembic, SQLite → Postgres copy, roles, LLM budget, tests/evals/browser checks, full env table, layout). .env.example completed. build_report.md started.
 - Tests: SQLite 83 passed + 1 skipped (also under a hostile env); Postgres run follows in stage 8/9. New test_audit.py; RBAC matrix + /api/audit.

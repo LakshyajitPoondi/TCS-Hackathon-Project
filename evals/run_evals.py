@@ -172,7 +172,7 @@ def run_worker():
         fused=retrieval.search('LINE-A/IMM-01','coolant flow vibration manual',20)
         with db.Session() as s:
             fusion_leaks=sum(not machine_allowed(s.get(db.Machine,'LINE-A/IMM-01'),s.get(db.Document,hit['doc_id']).scope,s.get(db.Document,hit['doc_id']).targets) for hit in fused['hits'])
-    suites.append(suite('Retrieval',[metric('lexical_recall_at_k',sum(r['recall_at_k'] for r in retrieval_rows)/len(retrieval_rows),.8),metric('lexical_MRR',sum(r['reciprocal_rank'] for r in retrieval_rows)/len(retrieval_rows),.8),metric('wrong_machine_leak_rate',sum(r['wrong_machine_leaks'] for r in retrieval_rows),0,True),metric('filtered_out_correctness',ratio([r['filtered_correct'] for r in retrieval_rows]),1),metric('mocked_embedding_fusion_leaks',fusion_leaks,0,True),{'metric':'live_embedding_recall_at_k','value':None,'threshold':.8,'passed':None,'status':'Unverified: model inference not part of deterministic suite'}],retrieval_rows))
+    suites.append(suite('Retrieval',[metric('lexical_recall_at_k',sum(r['recall_at_k'] for r in retrieval_rows)/len(retrieval_rows),.8),metric('lexical_MRR',sum(r['reciprocal_rank'] for r in retrieval_rows)/len(retrieval_rows),.8),metric('wrong_machine_leak_rate',sum(r['wrong_machine_leaks'] for r in retrieval_rows),0,True),metric('filtered_out_correctness',ratio([r['filtered_correct'] for r in retrieval_rows]),1),metric('mocked_embedding_fusion_leaks',fusion_leaks,0,True),{'metric':'hybrid_recall_at_4','value':None,'threshold':.85,'passed':None,'status':'Unverified: EMBEDDINGS_PROVIDER=none (run with fastembed)'}],retrieval_rows))
     p={'incident_id':'INC-007','kpis':{'alarm_count':7},'hypotheses':[{'rank':1,'supporting_evidence':[{'signal':'temperature_delta','machine':'IMM-01','value':10,'description':'Temperature on IMM-01 rose from 60 to 70.'}],'chunks':[{'doc_id':'SOP-007','chunk_id':'c1','text':'Check coolant flow.'}]}]}
     adversarial=[]
     for narrative,step,cid in [('Temperature fell to 7.','Check coolant flow.','c1'),('Hypothesis requires verification.','Replace the entire machine immediately.','c1'),('Temperature on IMM-02 rose to 70.','Check coolant flow.','c1'),('Temperature on IMM-01 fell to 70.','Check coolant flow.','c1'),('Hypothesis requires verification.','Check coolant flow.','unretrieved')]:
@@ -201,15 +201,27 @@ def run_worker():
     matrix=subprocess_result('evals.rbac_check')
     workflow=[r for r in matrix if '/api/cases' in r.get('endpoint','')]
     suites.append(suite('Experience memory',[metric('leave_one_out_category_agreement',ratio([r['category_agreement'] for r in memory]),.7),metric('current_incident_exclusion',ratio([r['current_excluded'] for r in memory]),1),metric('approval_role_enforced',ratio([r['passed'] for r in workflow]),1),{'metric':'physical_machine_agreement','value':sum(r['machine_agreement'] for r in memory)/len(memory),'threshold':0,'passed':True,'status':'Context metric; cross-machine recall is permitted'}],memory))
-    suites.append(suite('RBAC',[metric('endpoint_role_matrix',ratio([r['passed'] for r in matrix]),1)],matrix))
+    suites.append(suite('RBAC',[metric('endpoint_role_matrix',ratio([r['passed'] for r in matrix]),1),
+                                {'metric':'endpoints_covered','value':len({(r.get('method'),r['endpoint']) for r in matrix if 'endpoint' in r}),'threshold':None,'passed':True,'status':'count'}],matrix))
+    flows=subprocess_result('evals.workflow_check')
+    suites.append(suite('Workflow and drafts',[metric('status_transitions',ratio([r['passed'] for r in flows['workflow'] if r['check'] in ('status_sequence','rejected_status')]),1),
+                                               metric('draft_versioning_and_export',ratio([r['passed'] for r in flows['workflow'] if r['check'] not in ('status_sequence','rejected_status')]),1)],flows['workflow']))
+    mem=flows['memory'];get=lambda name:float(next(r['passed'] for r in mem if r['check']==name))
+    suites.append(suite('Memory agent',[metric('summary_fields_filled',ratio([get('template_summary_fields_filled'),get('fake_llm_summary_fields_filled')]),1),
+                                        metric('duplicate_detection',ratio([get('duplicate_same_incident_blocked'),get('duplicate_override_with_reason'),get('similar_approved_case_detected')]),1),
+                                        metric('retired_never_recalled',get('retired_never_recalled'),1),metric('semantic_recall',get('semantic_recall'),1),
+                                        metric('edit_versioning',get('edit_keeps_previous_version'),1)],mem))
     suites.append(judge(results))
     if config.EMBEDDINGS_PROVIDER!='none':
         from evals.embedding_check import run as real_embedding_check
         benchmark=real_embedding_check(config.EMBEDDINGS_PROVIDER)
         retrieval_suite=next(s for s in suites if s['suite']=='Retrieval')
         if benchmark['status']=='Verified':
-            retrieval_suite['metrics'][-1]=metric('live_embedding_recall_at_k',benchmark['recall_at_4'],.8)
-            retrieval_suite['metrics'].append(metric('live_embedding_wrong_machine_leaks',benchmark['wrong_machine_leaks'],0,True))
+            tag={'backend':benchmark['backend'],'model':benchmark['model']}
+            retrieval_suite['metrics'][-1]={**metric('hybrid_recall_at_4',benchmark['recall_at_4'],.85),**tag}
+            retrieval_suite['metrics'].append({**metric('hybrid_MRR',benchmark['mrr'],.8),**tag})
+            retrieval_suite['metrics'].append({**metric('hybrid_wrong_machine_leaks',benchmark['wrong_machine_leaks'],0,True),**tag})
+            retrieval_suite['metrics'].append({**metric('hybrid_filtered_out_correctness',benchmark['filtered_correctness'],1),**tag})
         else:retrieval_suite['metrics'][-1]['status']='Unverified: '+benchmark.get('reason','provider failure')
         retrieval_suite['details'].append({'real_embedding_benchmark':benchmark})
     return {'suites':suites,'config':{'fixtures':len(fixtures),'incidents':len(results),'llm_checks':'fake/no-key/mocked HTTP','embeddings':'none + mocked fusion','rag_top_k':config.RAG_TOP_K,'prompt_version':llm.PROMPT_VERSION,'agent_max_steps':config.AGENT_MAX_STEPS}}

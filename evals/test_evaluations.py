@@ -3,7 +3,7 @@ def test_all_deterministic_thresholds():
     result=compute()
     failed=[(s['suite'],m) for s in result['suites'] for m in s['metrics'] if m['passed'] is False]
     assert not failed,failed
-    assert len(result['suites'])==9
+    assert len(result['suites'])==11
 def test_stored_evals_rbac(client,tokens,monkeypatch):
     from backend.api.routes import evals
     sample={'suites':[{'suite':'test','metrics':[{'metric':'probe','value':1,'threshold':1,'passed':True}],'details':[]}],'config':{'probe':True}}

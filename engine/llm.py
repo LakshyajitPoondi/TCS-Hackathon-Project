@@ -206,9 +206,10 @@ def _fake_post(fake_output):
     return _FakeResponse(200, content=json.dumps(fake_output))
 
 
-def _post(url, purpose, model, fake_output=None, **kwargs):
-    """One logical request: quota/429 never retried; 503 retried at most twice. Each attempt is counted."""
-    for attempt in range(RETRIES_503 + 1):
+def _post(url, purpose, model, fake_output=None, retries_503=RETRIES_503, **kwargs):
+    """One logical request: quota/429 never retried; 503 retried at most `retries_503` (<= 2) times. Each attempt is counted."""
+    retries_503 = max(0, min(RETRIES_503, retries_503))
+    for attempt in range(retries_503 + 1):
         row_id = _reserve(purpose, model)
         started = time.perf_counter()
         try:
@@ -227,7 +228,7 @@ def _post(url, purpose, model, fake_output=None, **kwargs):
                 raise LLMUnavailable('quota_exhausted')
             _finish(row_id, 'rate_limited', 429, latency)
             raise LLMUnavailable('rate_limited')
-        if code == 503 and attempt < RETRIES_503:
+        if code == 503 and attempt < retries_503:
             retry_after = _retry_after_seconds(response)
             _finish(row_id, 'http_503', 503, latency)
             if retry_after is not None and retry_after > MAX_RETRY_AFTER:
@@ -247,7 +248,7 @@ def chat_completions_url(base):
     return base.rstrip('/') + '/chat/completions'
 
 
-def request_json(system, payload, schema, *, purpose='wording', model=None, fake_output=None, validate=None):
+def request_json(system, payload, schema, *, purpose='wording', model=None, fake_output=None, validate=None, retries_503=RETRIES_503):
     """Shared provider call. Returns validated data or None; records every attempt."""
     provider, model = config.LLM_PROVIDER, model or config.LLM_MODEL
     if not available():
@@ -259,7 +260,7 @@ def request_json(system, payload, schema, *, purpose='wording', model=None, fake
         try:
             if provider == 'fake' or provider in OPENAI_COMPATIBLE:
                 base = config.LLM_BASE_URL or DEFAULT_BASE_URLS.get(provider, 'https://fake.invalid/v1')
-                response = _post(chat_completions_url(base), purpose, model, fake_output=fake_output,
+                response = _post(chat_completions_url(base), purpose, model, fake_output=fake_output, retries_503=retries_503,
                                  headers={'Authorization': 'Bearer ' + config.LLM_API_KEY},
                                  json={'model': model, 'temperature': 0, 'response_format': {'type': 'json_object'},
                                        'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': json.dumps(payload)}]},
@@ -268,7 +269,7 @@ def request_json(system, payload, schema, *, purpose='wording', model=None, fake
                 content = body['choices'][0]['message']['content']
             elif provider == 'anthropic':
                 base = config.LLM_BASE_URL or 'https://api.anthropic.com/v1'
-                response = _post(base.rstrip('/') + '/messages', purpose, model,
+                response = _post(base.rstrip('/') + '/messages', purpose, model, retries_503=retries_503,
                                  headers={'x-api-key': config.LLM_API_KEY, 'anthropic-version': '2023-06-01'},
                                  json={'model': model, 'max_tokens': 3000, 'temperature': 0, 'system': system,
                                        'messages': [{'role': 'user', 'content': json.dumps(payload)}]}, timeout=config.LLM_TIMEOUT_SECONDS)
