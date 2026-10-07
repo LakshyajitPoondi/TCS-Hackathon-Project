@@ -18,3 +18,5 @@ data/embedding_cache/
 .cache/
 
 *.tsbuildinfo
+data/eval_docs/
+evals/docs_answer_key.json

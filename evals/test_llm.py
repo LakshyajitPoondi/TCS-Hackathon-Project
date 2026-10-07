@@ -98,3 +98,11 @@ def test_rate_limit_exhausted_falls_back_to_template(monkeypatch,tmp_path):
     sent=_capture(monkeypatch,[_ChatResponse(429) for _ in range(attempts)]); llm.reset_calls()
     assert llm.generate('x',PAYLOAD)==(None,'template')
     assert len(sent)==attempts and llm.calls()[-1]['fallback_reason']=='HTTPStatusError'
+
+def test_key_resolution_b1():
+    from backend.core.config import resolve_llm_key
+    assert resolve_llm_key('gemini','  k1 ','g') == ('k1','LLM_API_KEY')
+    assert resolve_llm_key('groq','','g1') == ('g1','GROQ_API_KEY')
+    assert resolve_llm_key('groq','   ','g1') == ('g1','GROQ_API_KEY')
+    assert resolve_llm_key('openai_compatible','','g1') == ('',None)
+    assert resolve_llm_key('gemini',None,'') == ('',None)

@@ -22,6 +22,8 @@ def isolated_db(tmp_path,monkeypatch):
     monkeypatch.setattr(db,'engine',engine)
     monkeypatch.setattr(db,'Session',sessionmaker(bind=engine,expire_on_commit=False))
     monkeypatch.setattr(config,'JWT_SECRET',secrets.token_urlsafe(48))
+    monkeypatch.setattr(config,'DOCUMENTS_DIR',tmp_path/'documents')
+    monkeypatch.setattr(config,'LLM_CACHE_DIR',tmp_path/'llm_cache')
     for name in ('SEED_ADMIN_EMAIL','SEED_ADMIN_PASSWORD','DEMO_USERS_ENABLED'):
         monkeypatch.delenv(name,raising=False)
     init_db()

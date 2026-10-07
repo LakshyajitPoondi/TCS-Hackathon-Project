@@ -1,10 +1,15 @@
-"""Deterministic synthetic document fixtures and evaluation-only labels."""
+"""Deterministic synthetic document fixtures and evaluation-only labels.
+
+Fixtures and the generated key are written to a temporary folder (never into the repository);
+callers use the key returned in memory."""
 import json
-from backend.core.config import DATA_DIR,ROOT_DIR
+import tempfile
+from pathlib import Path
+from backend.core.config import DATA_DIR
 from backend.services.data_loader import load_incident
 
-def generate():
-    directory=DATA_DIR/'eval_docs';directory.mkdir(exist_ok=True)
+def generate(directory=None):
+    directory=Path(directory or tempfile.mkdtemp(prefix='rca-eval-docs-'));directory.mkdir(parents=True,exist_ok=True)
     fixtures=[];mapping={}
     def add(did,filename,text,scope,targets,expected,status='active'):
         (directory/filename).write_text(text,encoding='utf-8')
@@ -43,18 +48,20 @@ Review material batch records, method setup changes, measurement sensors, people
         incidents[iid]={'expected_doc_ids':expected,'expected_facts':{u:facts[u] for u in allowed},
                         'forbidden_doc_ids':[f['doc_id'] for f in fixtures if f['scope']=='machine' and not set(f['targets'])&set(allowed)]}
     key={'fixtures':mapping,'incidents':incidents,'facts':facts}
-    (ROOT_DIR/'evals/docs_answer_key.json').write_text(json.dumps(key,indent=2),encoding='utf-8')
+    (directory/'docs_answer_key.json').write_text(json.dumps(key,indent=2),encoding='utf-8')
     return fixtures,key
 
 def install_fixtures():
+    """Ingest fixtures into the current database; returns (fixtures, key)."""
     from backend import db
     from backend.services.documents import ingest
-    fixtures,_=generate()
+    with tempfile.TemporaryDirectory(prefix='rca-eval-docs-') as directory:
+        fixtures,key=generate(directory)
     with db.Session.begin() as session:
         for f in fixtures:
             if not session.get(db.Document,f['doc_id']):
                 ingest(session,f['filename'],f['text'].encode(),f['doc_id'],'manual','1',f['scope'],f['targets'],None,doc_id=f['doc_id'])
-    return fixtures
+    return fixtures,key
 if __name__=='__main__':
     from backend.init_db import init_db
     init_db();install_fixtures();print('Generated and installed 25 deterministic synthetic documentation fixtures.')

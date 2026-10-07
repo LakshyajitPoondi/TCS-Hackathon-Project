@@ -24,7 +24,9 @@ def test_pdf_page_and_doc_metadata(client):
     assert r.status_code==200 and r.json()['status']=='pending_mapping'
     assert client.post('/api/documents/SOP-007/confirm',json={'scope':'plant','targets':[]}).status_code==200
 def test_registry_upload_plausibility(client):
-    frame=pd.read_csv('data/incidents/incident_001.csv');frame['machine']='UNKNOWN'
-    assert client.post('/api/incidents/upload',files={'file':('bad.csv',frame.to_csv(index=False).encode())}).status_code==422
+    # Rename one machine only, so timestamps stay unique and the identity check is what rejects it.
+    frame=pd.read_csv('data/incidents/incident_001.csv');frame.loc[frame.machine=='IMM-01','machine']='IMM-09'
+    r=client.post('/api/incidents/upload',files={'file':('bad.csv',frame.to_csv(index=False).encode())})
+    assert r.status_code==422 and r.json()['detail']=='Unknown physical machine: LINE-A/IMM-09',r.text
     frame=pd.read_csv('data/incidents/incident_001.csv');frame['vibration']=80
     assert client.post('/api/incidents/upload',files={'file':('bad.csv',frame.to_csv(index=False).encode())}).status_code==422

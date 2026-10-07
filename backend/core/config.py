@@ -51,15 +51,33 @@ APP_ENV = os.getenv("APP_ENV", "development")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/app.db")
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq").strip().lower()
 LLM_MODEL = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
-LLM_API_KEY = os.getenv("LLM_API_KEY", GROQ_API_KEY if LLM_PROVIDER == "groq" else "")
+
+
+def resolve_llm_key(provider, llm_api_key, groq_api_key):
+    """LLM_API_KEY for every provider; GROQ_API_KEY only for groq when LLM_API_KEY is empty/blank.
+    Returns (key, source variable name or None). Never logs the key itself."""
+    if (llm_api_key or "").strip():
+        return llm_api_key.strip(), "LLM_API_KEY"
+    if provider == "groq" and (groq_api_key or "").strip():
+        return groq_api_key.strip(), "GROQ_API_KEY"
+    return "", None
+
+
+LLM_API_KEY, LLM_KEY_SOURCE = resolve_llm_key(LLM_PROVIDER, os.getenv("LLM_API_KEY", ""), GROQ_API_KEY)
+import logging as _logging  # noqa: E402
+_logging.getLogger("rca.config").info("LLM provider=%s key_source=%s", LLM_PROVIDER, LLM_KEY_SOURCE or "none")
+if not LLM_API_KEY and GROQ_API_KEY and LLM_PROVIDER != "groq":
+    _logging.getLogger("rca.config").warning(
+        "GROQ_API_KEY is set but LLM_PROVIDER=%s reads only LLM_API_KEY; move the key to LLM_API_KEY.", LLM_PROVIDER)
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"  # default for LLM_PROVIDER=gemini
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", {"groq": "https://api.groq.com/openai/v1", "gemini": GEMINI_BASE_URL}.get(LLM_PROVIDER, ""))
 LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "15"))
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "1"))
 AGENT_ENABLED = os.getenv("AGENT_ENABLED", "true").lower() == "true"
 AGENT_MAX_STEPS = max(1, min(30, int(os.getenv("AGENT_MAX_STEPS", "10"))))
+DOCUMENTS_DIR = Path(os.getenv("DOCUMENTS_DIR", "") or DATA_DIR / "documents")
 EMBEDDINGS_PROVIDER = os.getenv("EMBEDDINGS_PROVIDER", "none")
 EMBEDDINGS_MODEL = os.getenv("EMBEDDINGS_MODEL", "BAAI/bge-small-en-v1.5")
 EMBEDDINGS_API_KEY = os.getenv("EMBEDDINGS_API_KEY", "")

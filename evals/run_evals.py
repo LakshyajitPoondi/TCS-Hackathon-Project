@@ -5,7 +5,9 @@ import json
 import os
 from pathlib import Path
 import secrets
+import shutil
 import subprocess
+import tempfile
 import sys
 import uuid
 from unittest.mock import patch
@@ -36,13 +38,15 @@ def child_env(path):
 def subprocess_result(module,**options):
     directory=config.ROOT_DIR/'.cache';directory.mkdir(exist_ok=True)
     path=directory/(module.rsplit('.',1)[-1]+'-'+uuid.uuid4().hex+'.db')
-    env=child_env(path);env.update(options)
+    docs=tempfile.mkdtemp(prefix='rca-eval-documents-')
+    env=child_env(path);env.update(DOCUMENTS_DIR=docs,**options)
     try:
         result=subprocess.run([sys.executable,'-m',module,'--worker'],cwd=config.ROOT_DIR,env=env,capture_output=True,text=True,encoding='utf-8',timeout=180)
         if result.returncode:raise RuntimeError('Evaluation worker failed: '+result.stderr[-2000:])
         return json.loads(result.stdout.splitlines()[-1])
     finally:
         if path.exists():path.unlink()
+        shutil.rmtree(docs,ignore_errors=True)
 
 class JudgeRatings(BaseModel):
     helpfulness:int=Field(ge=1,le=5)
@@ -101,8 +105,7 @@ def run_worker():
     from engine.signals import analyze_signals
     from engine.scoring import score_hypotheses
     from engine.grounding import check_detailed
-    init_db();fixtures=install_fixtures()
-    key=json.loads((config.ROOT_DIR/'evals/docs_answer_key.json').read_text(encoding='utf-8'))
+    init_db();fixtures,key=install_fixtures()
     suites=[]
     with contextlib.redirect_stdout(io.StringIO()):r=ranking()
     rows=r['rows'];clear=[row for row in rows if not row['abstain_expected']];abst=[row for row in rows if row['abstain_expected']];amb=[row for row in rows if row['also']]

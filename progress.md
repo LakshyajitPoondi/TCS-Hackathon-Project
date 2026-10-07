@@ -1,5 +1,31 @@
 # Build progress
 
+## v2 build (branch feature/v2, from main c58eed5)
+Prompt: v2 stages 0–9 (see audit_report_v2.md for bug IDs B1–B20). Each stage ends with checks, this file, and a commit "v2 stage N: …".
+**Next unfinished stage: 1.**
+
+### Live LLM call counter (budget 10 for the whole build)
+Used: 0.
+
+### v2 decisions (made by the agent)
+- D0.1 `.env` does not match the brief: LLM_PROVIDER=openai_compatible, LLM_API_KEY empty (the key sits in GROQ_API_KEY), JWT_SECRET / SEED_ADMIN_* / DEMO_PASSWORD empty. `.env` is never written by the agent. After B1 the key in GROQ_API_KEY is only read for provider=groq, so the owner must move it to LLM_API_KEY and set LLM_PROVIDER=gemini. A warning is logged at start-up when this mismatch is detected (no key printed).
+- D0.2 Generated eval fixtures (data/eval_docs/*, evals/docs_answer_key.json) were removed from git and are now produced in a temp folder per run; the key is passed in memory. Their content is deterministic, so nothing is lost.
+- D0.3 Uploaded documents path is configurable (DOCUMENTS_DIR, default data/documents). Tests and the eval worker point it at temp folders.
+
+### v2 stage log
+#### Stage 0 complete
+- main already contains stage 0–11 work (merge c58eed5). No processes were listening on 8001/5173/5174 (nothing to stop). Created feature/v2.
+- B1: `resolve_llm_key` — LLM_API_KEY for every provider; GROQ_API_KEY only when provider=groq and LLM_API_KEY empty/blank. Logs the source variable name only.
+- B17: fixtures + key written to a TemporaryDirectory; eval worker uses a temp DOCUMENTS_DIR. `git status` stays clean after pytest/evals.
+- B16: unknown-machine test now renames one machine (IMM-01→IMM-09) and asserts the exact "Unknown physical machine: LINE-A/IMM-09" message.
+- Removed committed frontend/tsconfig.tsbuildinfo.
+- Tests: pytest 42 passed (SQLite). Ranking regression 16/16 top-1, 16/16 top-3, 2/2 abstentions (test_rank_regression).
+- Docker engine is not running at the start of the build (Stage 1 will try to start Docker Desktop).
+
+---
+
+## v1 history (feature/llm-rag-rbac)
+
 Branch: feature/llm-rag-rbac; baseline on main: 6c6aa2d.
 Stages 0–11 run in sequence; each completed stage has tests and its own commit.
 Current stage: 11, final verification and report. Next unfinished stage: 11.

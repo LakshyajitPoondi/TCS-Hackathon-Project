@@ -8,7 +8,6 @@ from sqlalchemy import select
 from backend import db
 from backend.core import config
 
-DOCS_DIR=config.DATA_DIR / 'documents'
 DOC_TYPES={'manual','sop','maintenance_guide','troubleshooting_guide','spec_sheet','other'}
 SCOPES={'machine','model','line','plant'}
 
@@ -107,8 +106,8 @@ def ingest(session,filename,content,title,doc_type,version,scope,targets,user_id
     if detection['ambiguous']:detection['warnings'].append('Short machine name without line requires confirmation')
     doc_id=doc_id or 'DOC-'+uuid.uuid4().hex
     if session.get(db.Document,doc_id):raise HTTPException(409,'Document ID already exists')
-    DOCS_DIR.mkdir(parents=True,exist_ok=True)
-    path=DOCS_DIR/(uuid.uuid4().hex+Path(filename).suffix.lower());path.write_bytes(content)
+    config.DOCUMENTS_DIR.mkdir(parents=True,exist_ok=True)
+    path=config.DOCUMENTS_DIR/(uuid.uuid4().hex+Path(filename).suffix.lower());path.write_bytes(content)
     doc=db.Document(doc_id=doc_id,title=title.strip(),doc_type=doc_type,version=version,scope=scope,targets=targets,status='pending_mapping' if detection['ambiguous'] or detection['conflict'] else 'active',uploaded_by=user_id,detection=detection,storage_path=str(path))
     session.add(doc);session.flush();session.add_all(make_chunks(doc_id,version,parts));put_links(session,doc,machines)
     return doc

@@ -7,8 +7,7 @@ def run(provider='fastembed'):
     from evals.generate_docs import install_fixtures
     from backend.services.data_loader import load_incident
     from engine import retrieval
-    init_db();install_fixtures();config.EMBEDDINGS_PROVIDER=provider
-    key=json.loads((config.ROOT_DIR/'evals/docs_answer_key.json').read_text(encoding='utf-8'));rows=[]
+    init_db();_,key=install_fixtures();config.EMBEDDINGS_PROVIDER=provider;rows=[]
     for iid,item in key['incidents'].items():
         frame=load_incident(iid);uids=list(item['expected_facts'])
         result=retrieval.search(uids,'coolant flow synthetic specification vibration limit chiller reference manual',4)
