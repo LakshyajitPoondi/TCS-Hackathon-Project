@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { Activity, Menu } from "lucide-react";
 import { health } from "../../api/endpoints";
 import {useAuth} from '../../auth';
+import {request} from '../../api/client';
+import type {LlmStatus} from '../../types/api';
 
 type Status = "checking" | "online" | "offline";
 
@@ -45,6 +47,34 @@ function HealthIndicator() {
   );
 }
 
+const FALLBACK_LABEL: Record<string,string> = {quota_exhausted:'quota exhausted',daily_budget:'daily budget reached'};
+
+/** "LLM calls today: x / budget". Polls every 60 s; template wording is used whenever the LLM is unavailable. */
+export function LlmUsageChip() {
+  const [s, setS] = useState<LlmStatus | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () => request<LlmStatus>('/api/llm/status').then((r) => alive && setS(r)).catch(() => {});
+    load();
+    const t = window.setInterval(load, 60000);
+    window.addEventListener('rca-llm-used', load);
+    return () => { alive = false; window.clearInterval(t); window.removeEventListener('rca-llm-used', load); };
+  }, []);
+  if (!s) return null;
+  const off = !s.enabled || !s.key_configured;
+  const blocked = !!s.blocked_until;
+  const full = s.calls_today >= s.daily_budget;
+  const tone = off || blocked || full ? 'bg-warning-tint text-warning-ink' : 'bg-indigo-50 text-indigo-700';
+  const note = off ? 'templates only' : blocked ? FALLBACK_LABEL.quota_exhausted : full ? FALLBACK_LABEL.daily_budget : s.model;
+  return (
+    <span className={`hidden items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold md:inline-flex ${tone}`}
+      title={`Provider ${s.provider} · model ${s.model} · agent ${s.agent_mode} · max ${s.per_analysis_budget} calls per analysis`}>
+      LLM calls today: <span className="font-mono">{s.calls_today} / {s.daily_budget}</span>
+      <span className="font-normal">· {note}</span>
+    </span>
+  );
+}
+
 export function TopBar({ onMenu }: { onMenu: () => void }) {
   const {user,logout}=useAuth();
   return (
@@ -63,7 +93,8 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
         <span className="truncate text-[15px] font-bold text-ink-900">Production Intelligence</span>
         <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-bold tracking-wide text-indigo-700">RCA</span>
       </Link>
-      <div className="ml-auto">
+      <div className="ml-auto flex items-center gap-2">
+        <LlmUsageChip />
         <HealthIndicator />
       </div>
       <span className="hidden text-xs sm:inline">{user?.email} · {user?.role}</span><button className="rounded-full border border-slate-200 px-3 py-2 text-sm" onClick={()=>void logout().catch(()=>{})}>Sign out</button>

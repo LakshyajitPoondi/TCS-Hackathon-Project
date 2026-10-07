@@ -11,17 +11,26 @@ def test_agent_trace_shapes_caps_and_denial(client,monkeypatch):
     assert any(t['tool']=='read_document_chunk' for t in trace)
     monkeypatch.setattr(config,'LLM_PROVIDER','fake')
     fake=client.post('/api/incidents/INC-001/analyze').json()
-    assert fake.keys()==result.keys() and fake['investigation']['mode']=='llm'
+    assert fake['investigation']['mode']=='deterministic'   # default AGENT_MODE: no LLM planning
+    monkeypatch.setattr(config,'AGENT_MODE','llm_plan')
+    fake=client.post('/api/incidents/INC-001/analyze').json()
+    assert fake.keys()==result.keys() and fake['investigation']['mode']=='llm_plan' and fake['investigation']['plan_source']=='llm'
     assert [(h['category'],h['score']) for h in fake['hypotheses']]==[(h['category'],h['score']) for h in result['hypotheses']]
     monkeypatch.setattr(config,'AGENT_MAX_STEPS',2)
     assert client.post('/api/incidents/INC-001/analyze').json()['investigation']['steps']==2
     original=llm.request_json
     def malicious(system,payload,schema,**kwargs):
-        if schema.__name__=='ToolCall':return {'tool':'search_machine_documents','args':{'machine_uid':'LINE-C/IMM-01','query':'cooling'}}
+        if schema.__name__=='ToolPlan':return {'steps':[{'tool':'search_machine_documents','args':{'machine_uid':'LINE-C/IMM-01','query':'cooling'}},
+                                                         {'tool':'get_machine','args':{'machine_uid':'LINE-B/IMM-02'}},{'tool':'finish','args':{}}]}
         return original(system,payload,schema,**kwargs)
     monkeypatch.setattr(llm,'request_json',malicious)
+    monkeypatch.setattr(config,'AGENT_MAX_STEPS',10)
+    from sqlalchemy import delete
+    from backend import db
+    with db.Session.begin() as s:s.execute(delete(db.LLMCache))   # force a fresh (hostile) plan
     r=client.post('/api/incidents/INC-001/analyze').json()
-    assert r['investigation']['denied_calls']==2
+    assert r['investigation']['denied_calls']==2 and r['investigation']['steps']==2
+    assert [(h['category'],h['score']) for h in r['hypotheses']]==[(h['category'],h['score']) for h in result['hypotheses']]
 
 def test_approval_current_exclusion_and_weighting(client,tokens):
     case={'incident_id':'INC-001','rca_draft':'draft','confirmed_category':'machine','confirmed_subcause':'cooling','fix_applied':'Inspected coolant circulation','lessons':'Verify before release','documents_used':['SOP-007']}

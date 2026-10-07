@@ -11,4 +11,4 @@ def test_idempotent_seed(tmp_path, monkeypatch):
     with db.Session() as session:
         assert session.scalar(select(func.count()).select_from(db.Case)) == 12
         assert all(c.data['label']=='synthetic seed' for c in session.scalars(select(db.Case)))
-    assert len(db.Base.metadata.tables)==12
+    assert {'users','cases','document_chunks','llm_usage','llm_cache'} <= set(db.Base.metadata.tables)

@@ -9,6 +9,7 @@ import logging
 
 import pandas as pd
 
+from backend.core import config
 from backend.core.config import WARNING
 from backend.models.schemas import (
     AnalysisResponse,
@@ -125,7 +126,14 @@ def _llm_input(incident_id, evidence, hyps, retrieved, similar) -> dict:
 
 
 def run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, dict]:
-    """Returns (response, meta). meta = {text_source, retrieved_sops{rank: [ids]}, signature}."""
+    """Returns (response, meta). At most LLM_MAX_CALLS_PER_ANALYSIS provider requests (plan + wording)."""
+    with llm.call_budget(config.LLM_MAX_CALLS_PER_ANALYSIS) as scope:
+        response, meta = _run_analysis(incident_id, df)
+    response.llm_usage = llm.usage_summary(scope, meta["llm_calls"])
+    return response, meta
+
+
+def _run_analysis(incident_id: str, df: pd.DataFrame) -> tuple[AnalysisResponse, dict]:
     evidence = analyze_signals(df)
     llm.reset_calls()
     scored = score_hypotheses(evidence)

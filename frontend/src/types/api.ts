@@ -126,7 +126,8 @@ export interface Grounding {
 export interface AnalysisResponse {
   run_id:string;
   text_source:'llm'|'template';
-  investigation:{mode:string;steps:number;max_steps:number;capped:boolean;denied_calls:number};
+  llm_usage?:{requests:number;cache_hits:number;fallback_reason:string|null;per_analysis_budget:number};
+  investigation:{mode:string;plan_source?:string;steps:number;max_steps:number;capped:boolean;denied_calls:number};
   retrieval_status:Record<string,string>;
   documents_accessed:{doc_id:string;title:string;version:string;doc_type:string;scope:string;matched_machine:string[];why_allowed:string;chunks:{chunk_id:string;page_or_section:string;score:number;snippet:string}[];used_for:string[]}[];
   documents_filtered_out:{doc_id:string;title:string;reason:string}[];
@@ -175,4 +176,11 @@ export interface Sop {
 export interface EvalsResponse {
   metrics?: Record<string, unknown>[] | Record<string, unknown>;
   cases?: Record<string, unknown>[];
+}
+
+// ---------- LLM status (GET /api/llm/status) ----------
+
+export interface LlmStatus {
+  enabled:boolean;provider:string;model:string;key_configured:boolean;available:boolean;agent_mode:string;
+  calls_today:number;daily_budget:number;per_analysis_budget:number;blocked_until:string|null;last_status:string|null;day:string;
 }

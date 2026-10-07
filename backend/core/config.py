@@ -76,6 +76,15 @@ LLM_BASE_URL = os.getenv("LLM_BASE_URL", {"groq": "https://api.groq.com/openai/v
 LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "15"))
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "1"))
 AGENT_ENABLED = os.getenv("AGENT_ENABLED", "true").lower() == "true"
+# deterministic: fixed read-only tool sequence, no LLM calls. llm_plan: ONE LLM call returns the whole tool plan.
+AGENT_MODE = os.getenv("AGENT_MODE", "deterministic").strip().lower()
+if AGENT_MODE not in ("deterministic", "llm_plan"):
+    AGENT_MODE = "deterministic"
+# Live provider requests allowed per UTC day (counted in the database) and per analysis (plan + wording).
+LLM_DAILY_BUDGET = max(0, int(os.getenv("LLM_DAILY_BUDGET", "18")))
+LLM_MAX_CALLS_PER_ANALYSIS = max(0, int(os.getenv("LLM_MAX_CALLS_PER_ANALYSIS", "2")))
+# Test-only: what the fake provider returns (ok | quota | rate_limit | 503 | 503_once | invalid_json).
+LLM_FAKE_SCENARIO = os.getenv("LLM_FAKE_SCENARIO", "ok").strip().lower()
 AGENT_MAX_STEPS = max(1, min(30, int(os.getenv("AGENT_MAX_STEPS", "10"))))
 DOCUMENTS_DIR = Path(os.getenv("DOCUMENTS_DIR", "") or DATA_DIR / "documents")
 EMBEDDINGS_PROVIDER = os.getenv("EMBEDDINGS_PROVIDER", "fastembed").strip().lower()

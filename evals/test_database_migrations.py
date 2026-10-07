@@ -53,7 +53,9 @@ def test_v1_database_is_adopted_and_timestamps_converted(tmp_path, db_kind):
                                     "('C1', 'approved', '2026-10-06T09:22:53.257285+00:00', :d)"), {"d": json.dumps({"x": 1})})
         migrate(engine)
         with engine.connect() as connection:
-            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0002"
+            from alembic.script import ScriptDirectory
+            head = ScriptDirectory.from_config(alembic_config()).get_current_head()
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == head
         from sqlalchemy.orm import Session
         with Session(engine) as session:
             case = session.get(db.Case, "C1")

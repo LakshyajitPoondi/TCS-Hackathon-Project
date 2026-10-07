@@ -100,6 +100,7 @@ export function IncidentPage() {
       setAnalysis(res);
       setDraft(res.rca_draft); // engineer edits reset only on a new analysis
       setWarning(res.warning);
+      window.dispatchEvent(new Event('rca-llm-used'));
       window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
     } catch (e) {
       if (runToken === activeRun.current) setAnalyzeError(errorMessage(e));

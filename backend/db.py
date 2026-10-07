@@ -5,7 +5,7 @@ JSONB on Postgres and embeddings become pgvector vector(384) with an HNSW cosine
 """
 from datetime import datetime, timezone
 from sqlalchemy import (create_engine, event, Column, String, Integer, Boolean, JSON, ForeignKey, Text,
-                        DateTime, Index, DDL)
+                        DateTime, Index, DDL, Float)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.types import TypeDecorator
@@ -172,6 +172,33 @@ class EvalResult(Base):
     run_id = Column(String, ForeignKey("eval_runs.run_id", ondelete="CASCADE"), nullable=False)
     suite = Column(String, nullable=False)
     data = Column(JSONType, nullable=False)
+
+class LLMUsage(Base):
+    """One row per provider request (including failed ones); the daily budget counts today's rows."""
+    __tablename__ = "llm_usage"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    day = Column(String(10), nullable=False, index=True)
+    created_at = Column(UTCDateTime, default=now)
+    provider = Column(String, nullable=False)
+    model = Column(String, nullable=False)
+    purpose = Column(String, nullable=False)
+    status = Column(String, nullable=False)
+    http_status = Column(Integer, nullable=True)
+    latency_ms = Column(Float, nullable=True)
+    tokens = Column(JSONType, nullable=True)
+    blocked_until = Column(UTCDateTime, nullable=True)
+
+class LLMCache(Base):
+    """Validated LLM output keyed by kind + incident + analysis input hash + provider + model + prompt version."""
+    __tablename__ = "llm_cache"
+    cache_key = Column(String, primary_key=True)
+    kind = Column(String, nullable=False)
+    incident_id = Column(String, nullable=True, index=True)
+    provider = Column(String, nullable=False)
+    model = Column(String, nullable=False)
+    prompt_version = Column(String, nullable=False)
+    output = Column(JSONType, nullable=False)
+    created_at = Column(UTCDateTime, default=now)
 
 class RevokedToken(Base):
     __tablename__ = "revoked_tokens"

@@ -138,6 +138,7 @@ class AnalysisResponse(BaseModel):
     retrieval_status: dict = Field(default_factory=dict)
     run_id: str | None = None
     text_source: Literal['llm', 'template'] = 'template'
+    llm_usage: dict = Field(default_factory=dict)
     incident_id: str
     analysis_status: AnalysisStatus
     incident_window: IncidentWindow | None

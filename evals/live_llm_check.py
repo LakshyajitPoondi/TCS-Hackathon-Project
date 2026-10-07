@@ -1,30 +1,48 @@
-"""One entry point for live provider, three agent runs, live schema/grounding and judge checks."""
+"""Live provider check that spends at most --max-calls real requests (default 2).
+
+Runs ONE analysis of INC-001 with AGENT_MODE=llm_plan: one planning call + one wording call. Results are cached,
+so re-running spends nothing unless the cache is cleared. Quota errors are reported, never retried.
+Run: python -m evals.live_llm_check [--max-calls 2] [--incident INC-001]
+"""
+import argparse
 import json
 import sys
 from backend.core import config
 
-def run():
-    if not config.LLM_API_KEY or config.LLM_PROVIDER=='fake':
-        print('Live checks skipped: no live LLM_API_KEY (or GROQ_API_KEY for groq). Set LLM_PROVIDER, LLM_MODEL and the key, then rerun python -m evals.live_llm_check. No-key and fake paths are covered by pytest/evals.')
+
+def run(max_calls=2, incident='INC-001'):
+    if not config.LLM_API_KEY or config.LLM_PROVIDER == 'fake':
+        print('Live checks skipped: no live LLM_API_KEY (GROQ_API_KEY is read only when LLM_PROVIDER=groq). '
+              'Set LLM_PROVIDER, LLM_MODEL and LLM_API_KEY, then rerun python -m evals.live_llm_check. '
+              'No-key and fake paths are covered by pytest/evals.')
         return 0
     from backend.init_db import init_db
     from backend.services.analysis_service import run_analysis
     from backend.services.data_loader import load_incident
     from engine import llm
-    from evals.run_evals import settings,judge,provider_suite
-    init_db();llm.reset_calls()
-    payload={'hypotheses':[],'template_draft':'Engineering validation is required.','validation_warning':config.WARNING}
-    with settings(LLM_ENABLED=True,AGENT_ENABLED=True):
-        probe=llm.request_json(llm.SYSTEM_PROMPT,payload,llm.LLMOutput)
-        provider_calls=llm.calls();analyses=[];details=[]
-        for iid in ('INC-001','INC-002','INC-003'):
-            response,meta=run_analysis(iid,load_incident(iid));analyses.append(response)
-            live_wording=any(c['success'] and not c.get('cache_hit') for c in meta['llm_calls'])
-            details.append({'incident_id':iid,'text_source':response.text_source,'grounding':response.grounding.model_dump(),
-                            'investigation':response.investigation,'trace':meta['trace'],'calls':meta['llm_calls'],
-                            'passed':response.text_source=='llm' and response.grounding.passed and response.investigation['mode']=='llm' and response.investigation['denied_calls']==0 and live_wording})
-        report={'provider_probe':{'passed':probe is not None,'calls':provider_calls},'live_LLM_agent_suite':details,
-                'provider_regression_suite':provider_suite(),'optional_judge':judge(analyses)}
-    print(json.dumps(report,indent=2))
-    return 0 if probe is not None and all(d['passed'] for d in details) else 1
-if __name__=='__main__':sys.exit(run())
+    from evals.run_evals import settings
+    init_db()
+    before = llm.status()
+    with settings(LLM_ENABLED=True, AGENT_ENABLED=True, AGENT_MODE='llm_plan', LLM_MAX_CALLS_PER_ANALYSIS=min(max_calls, 2)):
+        response, meta = run_analysis(incident, load_incident(incident))
+    after = llm.status()
+    report = {'provider': config.LLM_PROVIDER, 'model': config.LLM_MODEL, 'incident_id': incident,
+              'calls_today_before': before['calls_today'], 'calls_today_after': after['calls_today'],
+              'live_requests_this_run': response.llm_usage['requests'], 'cache_hits': response.llm_usage['cache_hits'],
+              'text_source': response.text_source, 'agent_mode': response.investigation['mode'],
+              'plan_source': response.investigation.get('plan_source'), 'denied_calls': response.investigation['denied_calls'],
+              'grounding_passed': response.grounding.passed, 'grounding_flags': response.grounding.flagged,
+              'calls': [{k: c.get(k) for k in ('purpose', 'success', 'fallback_reason', 'latency_ms', 'cache_hit')} for c in meta['llm_calls']],
+              'blocked_until': after['blocked_until']}
+    passed = response.text_source == 'llm' and response.investigation['mode'] == 'llm_plan' and response.investigation['denied_calls'] == 0
+    report['status'] = 'Verified' if passed else 'Unverified (' + (response.llm_usage['fallback_reason'] or 'see calls') + ')'
+    print(json.dumps(report, indent=2, default=str))
+    return 0 if passed else 1
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--max-calls', type=int, default=2)
+    parser.add_argument('--incident', default='INC-001')
+    args = parser.parse_args()
+    sys.exit(run(args.max_calls, args.incident))

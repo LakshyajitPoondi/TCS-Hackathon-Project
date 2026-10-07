@@ -2,10 +2,11 @@
 
 ## v2 build (branch feature/v2, from main c58eed5)
 Prompt: v2 stages 0–9 (see audit_report_v2.md for bug IDs B1–B20). Each stage ends with checks, this file, and a commit "v2 stage N: …".
-**Next unfinished stage: 2.**
+**Next unfinished stage: 3.**
 
 ### Live LLM call counter (budget 10 for the whole build)
-Used: 0.
+Used: 2 of 10.
+1–2. Stage 2 `python -m evals.live_llm_check --max-calls 2` (gemini-3.8-flash, key passed in memory from GROQ_API_KEY because .env has LLM_API_KEY empty): both requests were the agent-plan call, both HTTP 503 "overloaded" (5.1 s, 1.0 s). Per-analysis budget then stopped further calls; template wording used; grounding passed. Live LLM wording/plan: **Unverified (provider 503)**. Quota was not hit (no 429).
 
 ### v2 decisions (made by the agent)
 - D0.1 `.env` does not match the brief: LLM_PROVIDER=openai_compatible, LLM_API_KEY empty (the key sits in GROQ_API_KEY), JWT_SECRET / SEED_ADMIN_* / DEMO_PASSWORD empty. `.env` is never written by the agent. After B1 the key in GROQ_API_KEY is only read for provider=groq, so the owner must move it to LLM_API_KEY and set LLM_PROVIDER=gemini. A warning is logged at start-up when this mismatch is detected (no key printed).
@@ -17,9 +18,19 @@ Used: 0.
 - D1.4 Verification steps: numbered steps from all hits are preferred; a raw "Review reference" is used only if no hit has numbered steps; drafts cite such references by doc/chunk ID instead of quoting their prose (the quoted SOP text "motor current rose" made the INC-009 template draft fail grounding under the FTS ranking). Also fixes B4 (step = first sentence only) and B19 (abstain draft "Suggested checks" now lists the retrieved steps).
 - D1.5 Schema bootstrap: Postgres → `alembic upgrade head` (a v1 DB without alembic_version is stamped 0001 first); SQLite → `create_all`. `DB_BOOTSTRAP=create_all|migrate` overrides. On SQLite migration 0002 only normalises ISO timestamp text (a batch rebuild would CAST it to a number).
 - D1.6 Tests: `pytest --db sqlite|postgres` (or TEST_DB). Postgres tests use database rca_test (auto-created, never the app DB) with a throwaway schema per test; eval workers follow EVAL_DB.
+- D2.1 Every provider HTTP request (including 503 retries and failures) is one row in llm_usage and counts toward LLM_DAILY_BUDGET (UTC day) and the per-operation budget. Fake-provider requests are counted too, so budgets are testable.
+- D2.2 Any HTTP 429 is never retried. Quota-type 429 (RESOURCE_EXHAUSTED / "quota" / Retry-After > 60 s) stores blocked_until = now + provider retry delay (1 h if unknown); later calls skip the provider until then. 4xx errors (bad key/model) are never retried.
+- D2.3 LLM output cache moved from data/llm_cache files to table llm_cache, keyed by kind + incident + input hash (which includes provider, model, prompt version and the full analysis payload). Agent plans are cached the same way (kind agent_plan).
+- D2.4 AGENT_MODE=llm_plan sends hypotheses (rank/category/subcause/confidence/target only), allowed machines, retrieved chunk ids and the recommended deterministic plan; the returned plan is executed with the same authorization checks. AnalysisResponse gained an additive `llm_usage` field {requests, cache_hits, fallback_reason, per_analysis_budget}; investigation gained `plan_source`.
+- D2.5 The test-only fake provider runs through the same HTTP status handling; LLM_FAKE_SCENARIO = ok | quota | rate_limit | 503 | 503_once | invalid_json.
 - D1.7 Code defaults changed to DATABASE_URL=postgresql+psycopg://rca:rca@localhost:5433/rca and EMBEDDINGS_PROVIDER=fastembed. The owner's .env still says sqlite + none, so the owner must change those two lines to use Postgres/pgvector.
 
 ### v2 stage log
+#### Stage 2 complete
+- B2 fixed (no retry on 429/quota, ≤2 retries on 503 with 1 s/2 s backoff, immediate template fallback recording quota_exhausted). B3 fixed (AGENT_MODE deterministic default with zero LLM calls; llm_plan = one call). One wording call per analysis covers narratives, steps and draft. Daily budget table + GET /api/llm/status. UI: top-bar chip "LLM calls today: x / 18" (warns on quota/budget/no key), analysis shows text source, LLM requests used/budget, cache hits and fallback reason, agent mode.
+- Tests: SQLite 54 passed + 1 skipped; Postgres 55 passed. New fake/mocked tests: quota not retried + blocks next call, long Retry-After, short 429, 503 ×2 then fail, 503 once then success, 4xx not retried, invalid JSON, daily budget, per-analysis budget, cache hit makes no request, analysis = exactly 2 requests then 0 on re-run, stored analysis re-open makes 0. Eval suite "LLM layer" adds quota_and_budget_fallback_rate (1.0); agent suite adds llm_plan_single_call_within_budget (1.0).
+- Live: see counter above (Unverified, provider 503). Frontend tsc passes.
+
 #### Stage 1 complete
 - docker-compose.yml: pgvector/pgvector:pg18 (Postgres 18.6, pgvector 0.8.7), host port 5433, named volume rca_pgdata, pg_isready healthcheck, init SQL `CREATE EXTENSION IF NOT EXISTS vector`. Docker Desktop had to be started; the native PG18 on 5432 was not touched.
 - Added pinned psycopg[binary] 3.3.6, alembic 1.20.0, pgvector 0.5.0 (+ fpdf2 2.8.9, PyYAML 6.0.3 for later stages).
