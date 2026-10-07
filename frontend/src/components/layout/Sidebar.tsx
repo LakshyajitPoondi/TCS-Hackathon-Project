@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { CheckCircle2, GitBranch, Upload, X,Factory,FileText,Users,BookOpen,LayoutDashboard } from "lucide-react";
+import { CheckCircle2, GitBranch, Upload, X,Factory,FileText,Users,BookOpen,LayoutDashboard,ScrollText } from "lucide-react";
 import {useAuth} from '../../auth';
 import {request} from '../../api/client';
 
-/** Pending counts for sidebar badges; refreshed on navigation and every 60 s. */
+interface NavCounts { documents_pending: number; cases_pending: number; users_pending: number }
+
+/** Pending counts for sidebar badges; refreshed on navigation, after actions and every 60 s. */
 function useNavCounts(pathname: string) {
-  const [counts, setCounts] = useState<{ documents_pending: number; cases_pending: number } | null>(null);
+  const [counts, setCounts] = useState<NavCounts | null>(null);
   useEffect(() => {
     let alive = true;
-    const load = () => request<{ documents_pending: number; cases_pending: number }>("/api/nav/counts").then((c) => alive && setCounts(c)).catch(() => {});
+    const load = () => request<NavCounts>("/api/nav/counts").then((c) => alive && setCounts(c)).catch(() => {});
     load();
     const t = window.setInterval(load, 60000);
     window.addEventListener("rca-counts-changed", load);
@@ -26,6 +28,7 @@ const NAV = [
   { to:'/documents',label:'Documents',icon:FileText,match:(p:string)=>p.startsWith('/documents')},
   { to:'/cases',label:'Cases',icon:BookOpen,match:(p:string)=>p.startsWith('/cases')},
   { to:'/users',label:'Users',icon:Users,match:(p:string)=>p.startsWith('/users')},
+  { to:'/audit',label:'Audit log',icon:ScrollText,match:(p:string)=>p.startsWith('/audit')},
   { to: "/evaluations", label: "Evaluations", icon: CheckCircle2, match: (p: string) => p.startsWith("/evaluations") },
 ];
 
@@ -33,10 +36,10 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
   const { pathname } = useLocation();
   const {can}=useAuth();
   const counts=useNavCounts(pathname);
-  const badge:Record<string,number|undefined>={'/documents':can('documents')?counts?.documents_pending:undefined,'/cases':can('approve')?counts?.cases_pending:undefined};
+  const badge:Record<string,number|undefined>={'/documents':can('documents')?counts?.documents_pending:undefined,'/cases':can('approve')?counts?.cases_pending:undefined,'/users':can('users')?counts?.users_pending:undefined};
   return (
     <nav aria-label="Main" className="flex flex-col gap-1 p-3">
-      {NAV.filter(n=>(n.to!='/upload'||can('upload'))&&(n.to!='/users'||can('users'))).map(({ to, label, icon: Icon, match }) => {
+      {NAV.filter(n=>(n.to!='/upload'||can('upload'))&&(n.to!='/users'||can('users'))&&(n.to!='/audit'||can('users'))).map(({ to, label, icon: Icon, match }) => {
         const active = match(pathname);
         const count = badge[to];
         return (

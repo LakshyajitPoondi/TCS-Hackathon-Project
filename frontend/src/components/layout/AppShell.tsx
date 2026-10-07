@@ -1,6 +1,7 @@
-import { useCallback, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
+import { Spinner } from "../ui/Spinner";
 import { TopBar } from "./TopBar";
 import { ValidationBanner, WarningProvider } from "./ValidationBanner";
 
@@ -25,7 +26,9 @@ export function AppShell() {
           <Sidebar open={menuOpen} onClose={closeMenu} />
           <main id="main" className="min-w-0 flex-1 bg-surface-alt">
             <div className="mx-auto w-full max-w-page px-4 py-6 sm:px-6 lg:py-8">
-              <Outlet />
+              <Suspense fallback={<div className="flex min-h-[40vh] items-center justify-center"><Spinner label="Loading…" /></div>}>
+                <Outlet />
+              </Suspense>
             </div>
           </main>
         </div>

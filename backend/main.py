@@ -5,6 +5,7 @@ from backend.api.routes import registry
 from backend.api.routes import runs
 from backend.api.routes import llm_status
 from backend.api.routes import dashboard
+from backend.api.routes import audit
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import logging
@@ -67,3 +68,4 @@ app.include_router(registry.router)
 app.include_router(runs.router)
 app.include_router(llm_status.router)
 app.include_router(dashboard.router)
+app.include_router(audit.router)

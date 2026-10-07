@@ -34,6 +34,10 @@ def isolated_db(tmp_path,monkeypatch,db_kind):
         monkeypatch.setattr(config,'UPLOADS_DIR',tmp_path/'uploads')
         monkeypatch.setattr(config,'LLM_CACHE_DIR',tmp_path/'llm_cache')
         monkeypatch.setattr(config,'EMBEDDINGS_PROVIDER','none')
+        # Tests must not depend on the shell or .env: pin every LLM setting they rely on.
+        for name,value in {'LLM_ENABLED':True,'LLM_DAILY_BUDGET':18,'LLM_MAX_CALLS_PER_ANALYSIS':2,'LLM_MAX_RETRIES':1,
+                           'AGENT_ENABLED':True,'AGENT_MODE':'deterministic','AGENT_MAX_STEPS':10,'LLM_FAKE_SCENARIO':'ok'}.items():
+            monkeypatch.setattr(config,name,value)
         for name in ('SEED_ADMIN_EMAIL','SEED_ADMIN_PASSWORD','DEMO_USERS_ENABLED'):
             monkeypatch.delenv(name,raising=False)
         yield from _seeded(engine)

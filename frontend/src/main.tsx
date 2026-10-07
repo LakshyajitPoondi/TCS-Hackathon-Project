@@ -1,28 +1,38 @@
-import { StrictMode } from "react";
+import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import "./styles/globals.css";
 import { AppShell } from "./components/layout/AppShell";
-import { IncidentsPage } from "./pages/IncidentsPage";
-import { IncidentPage } from "./pages/IncidentPage";
-import { UploadPage } from "./pages/UploadPage";
-import { EvaluationsPage } from "./pages/EvaluationsPage";
 import { EmptyState } from "./components/ui/EmptyState";
 import { Button } from "./components/ui/Button";
+import { Spinner } from "./components/ui/Spinner";
 import {AuthProvider,Guard} from './auth';
-import {LoginPage} from './pages/LoginPage';
-import {MachinesPage,MachinePage} from './pages/MachinesPage';
-import {DocumentsPage,DocumentPage} from './pages/DocumentsPage';
-import {UsersPage} from './pages/ManagementPages';
-import {CasesPage,CaseDetailPage} from './pages/CasesPages';
-import {DashboardPage} from './pages/DashboardPage';
+
+// B20: every route is its own chunk; the shell, auth and UI primitives stay in the main bundle.
+const named = <K extends string>(load: () => Promise<Record<K, React.ComponentType>>, name: K) =>
+  lazy(() => load().then((m) => ({ default: m[name] })));
+const LoginPage = named(() => import('./pages/LoginPage'), 'LoginPage');
+const DashboardPage = named(() => import('./pages/DashboardPage'), 'DashboardPage');
+const IncidentsPage = named(() => import('./pages/IncidentsPage'), 'IncidentsPage');
+const IncidentPage = named(() => import('./pages/IncidentPage'), 'IncidentPage');
+const UploadPage = named(() => import('./pages/UploadPage'), 'UploadPage');
+const EvaluationsPage = named(() => import('./pages/EvaluationsPage'), 'EvaluationsPage');
+const MachinesPage = named(() => import('./pages/MachinesPage'), 'MachinesPage');
+const MachinePage = named(() => import('./pages/MachinesPage'), 'MachinePage');
+const DocumentsPage = named(() => import('./pages/DocumentsPage'), 'DocumentsPage');
+const DocumentPage = named(() => import('./pages/DocumentsPage'), 'DocumentPage');
+const UsersPage = named(() => import('./pages/ManagementPages'), 'UsersPage');
+const CasesPage = named(() => import('./pages/CasesPages'), 'CasesPage');
+const CaseDetailPage = named(() => import('./pages/CasesPages'), 'CaseDetailPage');
+const AuditPage = named(() => import('./pages/AuditPage'), 'AuditPage');
+const pageFallback = <div className="flex min-h-[40vh] items-center justify-center"><Spinner label="Loading…" /></div>;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
       <Routes>
-        <Route path="/login" element={<LoginPage/>}/>
+        <Route path="/login" element={<Suspense fallback={pageFallback}><LoginPage/></Suspense>}/>
         <Route element={<Guard/>}>
         <Route element={<AppShell />}>
           <Route path="/" element={<DashboardPage />} />
@@ -35,7 +45,7 @@ createRoot(document.getElementById("root")!).render(
           <Route path="/documents/:id" element={<DocumentPage/>}/>
           <Route path="/cases" element={<CasesPage/>}/>
           <Route path="/cases/:id" element={<CaseDetailPage/>}/>
-          <Route element={<Guard action="users"/>}><Route path="/users" element={<UsersPage/>}/></Route>
+          <Route element={<Guard action="users"/>}><Route path="/users" element={<UsersPage/>}/><Route path="/audit" element={<AuditPage/>}/></Route>
           <Route path="/evaluations" element={<EvaluationsPage />} />
           <Route
             path="*"

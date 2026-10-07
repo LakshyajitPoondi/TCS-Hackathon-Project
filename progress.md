@@ -2,7 +2,7 @@
 
 ## v2 build (branch feature/v2, from main c58eed5)
 Prompt: v2 stages 0–9 (see audit_report_v2.md for bug IDs B1–B20). Each stage ends with checks, this file, and a commit "v2 stage N: …".
-**Next unfinished stage: 7.**
+**Next unfinished stage: 8.**
 
 ### Live LLM call counter (budget 10 for the whole build)
 Used: 2 of 10.
@@ -40,9 +40,17 @@ Used: 2 of 10.
 - D6.2 Sign-up: POST /api/auth/signup creates an inactive viewer (name, email, password 10–72 bytes). Login with the right password on an inactive account returns 403 "Account pending activation"; a wrong password stays 401. Admins see pending sign-ups on the dashboard, a users_pending nav count and an "Inactive" label on the Users page.
 - D6.3 Robot animation: framer-motion springs (eyes 300/25, head 120/18, body 60/14, arms 170/20) driven from one framer frame loop (useAnimationFrame) that reads the pointer ref; float/pulse/dots are CSS keyframes; only transform/opacity animate (plus the static eye-glow filter). Expressions (line, dots, happy, sad, giggle) cross-fade by opacity. The privacy pose lifts the arms 44 px so the hands cover the eyes. Reduced motion: no float/hop/shake/head movement, eyes ±4 px, no springs.
 - D6.4 Layout stability: the demo-profile area has a reserved height and a fixed 2 × 2 grid, so neither the config request nor the web-font swap moves the card (measured CLS ≈ 0.001).
+- D7.1 Every route is a lazy chunk (React.lazy + Suspense in the shell); the shell, auth and UI primitives stay in the main bundle. IncidentPage (413 kB, includes Recharts) is the largest route chunk.
+- D7.2 Audit viewer: GET /api/audit (admin only) with user / action / date range (UTC days) filters and limit/offset paging; /audit page with URL-synced filters.
+- D7.3 evals/conftest.py pins the LLM/agent settings tests depend on, so a shell or .env with LLM_ENABLED=false, budget 0 or AGENT_MODE=llm_plan cannot change test outcomes (found when a test run inherited the walk environment; verified passing under that hostile environment).
 - D1.7 Code defaults changed to DATABASE_URL=postgresql+psycopg://rca:rca@localhost:5433/rca and EMBEDDINGS_PROVIDER=fastembed. The owner's .env still says sqlite + none, so the owner must change those two lines to use Postgres/pgvector.
 
 ### v2 stage log
+#### Stage 7 complete
+- B20: route code-splitting, main JS 760 kB → 276 kB, no Vite chunk-size warning. Audit-log viewer (admins). README rewritten (Docker + Postgres, Alembic, SQLite → Postgres copy, roles, LLM budget, tests/evals/browser checks, full env table, layout). .env.example completed. build_report.md started.
+- Tests: SQLite 83 passed + 1 skipped (also under a hostile env); Postgres run follows in stage 8/9. New test_audit.py; RBAC matrix + /api/audit.
+- Browser: workflow walk 9/9 and robot checks 31/31 on the code-split build; audit page filter verified headless (36 login rows, all "login").
+
 #### Stage 6 complete
 - Login page per §7.1: glass left panel (logo, "Engine online" badge, 3-line headline, robot, 3 glass capability chips, footer "RCA engine v0.1.0" / "Data source connected"), right panel with Sign in / Sign up segmented toggle, email + password with icons, eye-icon toggle, 4 demo profile buttons (admin, plant engineer, QA lead, viewer) that fill email and password, errors under the inputs with input shake.
 - RcaRobot per §8 in features/auth/robot/ (RcaRobot, RobotSvg, useCursorTarget, useRobotState, poses, RobotContext, robot.css + RobotFallback): layered SVG, cursor tracking with lagged springs, blink (incl. double), idle look-around after 4 s, float + shadow, chest pulse, state machine (watchingEmail with caret tracking and nods, privacy, peeking, thinking dots + sway, success hop/wave/happy eyes/mint flash then navigate after 900 ms, error head-shake + red sad eyes 1.5 s), demo-profile wave, toggle glance + hop, easter eggs (head giggle, chest glow, 1.5 s debounce), touch + already-permitted device orientation, reduced motion, lazy chunk (RcaRobot 146 kB) with a same-size static fallback.
